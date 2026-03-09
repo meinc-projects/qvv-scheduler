@@ -313,8 +313,9 @@ def send_email(to_address, subject, html_body):
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = st.secrets["ZOHO_EMAIL"]
+        msg["From"] = f"Quick VIN Verification <{st.secrets['ZOHO_EMAIL']}>"
         msg["To"] = to_address
+        msg["Reply-To"] = "leads@quickautotags.com"
         msg.attach(MIMEText(html_body, "html"))
 
         # Connect to Zoho SMTP with SSL on port 465
@@ -449,7 +450,7 @@ def send_customer_confirmation_email(appt):
             <hr style="border: 1px solid #ddd;">
             <p style="font-size: 14px; color: #666;">
                 Quick VIN Verification<br>
-                Phone: (951) 339-2029<br>
+                Phone: (951) 394-7012<br>
                 Website: <a href="https://www.vinverifications.com">vinverifications.com</a>
             </p>
         </div>
@@ -461,11 +462,13 @@ def send_customer_confirmation_email(appt):
 def send_customer_confirmation_sms(appt):
     """Send the customer a short SMS confirming we received their request."""
     msg = (
-        f"Hi {appt['full_name']}! We received your VIN verification request for "
-        f"{appt['vehicle_year']} {appt['vehicle_make']} {appt['vehicle_model']} "
-        f"on {appt['preferred_date']} ({appt['preferred_time']}). "
-        f"A team member will contact you to confirm. "
-        f"Questions? Call (951) 339-2029 — Quick VIN Verification"
+        f"Hi {appt['full_name']}! We received your VIN verification request "
+        f"for a {appt['vehicle_year']} {appt['vehicle_make']} {appt['vehicle_model']} "
+        f"on {appt['preferred_date']} ({appt['preferred_time']}).\n\n"
+        f"A team member will contact you to confirm your appointment.\n\n"
+        f"Questions? Call (951) 394-7012\n\n"
+        f"Thank you,\n"
+        f"Quick VIN Verification Team"
     )
     return send_sms(appt["phone"], msg)
 
@@ -532,7 +535,7 @@ def page_customer_form():
                 <h2>Appointment Request Submitted!</h2>
                 <p style="font-size: 18px;">Someone from our team will contact you shortly to confirm your appointment.</p>
                 <p style="margin-top: 1rem;">
-                    <strong>Phone:</strong> (951) 339-2029<br>
+                    <strong>Phone:</strong> (951) 394-7012<br>
                     <strong>Website:</strong> <a href="https://www.vinverifications.com">vinverifications.com</a>
                 </p>
             </div>
