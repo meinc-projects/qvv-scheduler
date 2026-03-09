@@ -40,21 +40,54 @@ st.markdown(f"""
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}}
 
-    /* Clean white background */
-    .stApp {{
-        background-color: #ffffff;
+    /* Clean white background everywhere */
+    .stApp, .main, section[data-testid="stSidebar"],
+    .block-container, [data-testid="stForm"] {{
+        background-color: #ffffff !important;
     }}
 
-    /* Global font */
-    html, body, [class*="css"] {{
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        color: #333;
+    /* Force all form inputs to white background with dark text */
+    input, select, textarea,
+    .stTextInput > div > div > input,
+    .stSelectbox > div > div > div,
+    .stSelectbox [data-baseweb="select"],
+    .stSelectbox [data-baseweb="select"] > div,
+    .stDateInput > div > div > input,
+    [data-baseweb="input"] > div,
+    [data-baseweb="base-input"],
+    [data-baseweb="select"] > div {{
+        background-color: #ffffff !important;
+        color: #333 !important;
+        border-radius: 8px !important;
     }}
 
-    /* Green CTA button */
+    /* Input borders */
+    .stTextInput > div > div > input,
+    .stDateInput > div > div > input {{
+        border: 1px solid #ccc !important;
+    }}
+    .stTextInput > div > div > input:focus,
+    .stDateInput > div > div > input:focus {{
+        border-color: #003594 !important;
+        box-shadow: 0 0 0 1px #003594 !important;
+    }}
+
+    /* Dropdown menus white background */
+    [data-baseweb="popover"],
+    [data-baseweb="menu"],
+    ul[role="listbox"],
+    ul[role="listbox"] li {{
+        background-color: #ffffff !important;
+        color: #333 !important;
+    }}
+    ul[role="listbox"] li:hover {{
+        background-color: #f0f4ff !important;
+    }}
+
+    /* Blue CTA button */
     .stButton > button,
     .stFormSubmitButton > button {{
-        background-color: #1a5632 !important;
+        background-color: #003594 !important;
         color: white !important;
         border: none !important;
         border-radius: 8px !important;
@@ -66,43 +99,14 @@ st.markdown(f"""
     }}
     .stButton > button:hover,
     .stFormSubmitButton > button:hover {{
-        background-color: #134025 !important;
+        background-color: #002570 !important;
         color: white !important;
-    }}
-
-    /* Form input styling */
-    .stTextInput > div > div > input,
-    .stSelectbox > div > div,
-    .stDateInput > div > div > input {{
-        border-radius: 8px !important;
-        border: 1px solid #ddd !important;
-    }}
-    .stTextInput > div > div > input:focus {{
-        border-color: #1a5632 !important;
-        box-shadow: 0 0 0 1px #1a5632 !important;
-    }}
-
-    /* Section cards */
-    .form-section {{
-        background: #fafafa;
-        border: 1px solid #eee;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-    }}
-    .form-section h3 {{
-        color: #1a5632;
-        font-size: 18px;
-        margin-top: 0;
-        margin-bottom: 1rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 2px solid #1a5632;
     }}
 
     /* Metric card styling */
     div[data-testid="metric-container"] {{
-        background: #fafafa;
-        border: 1px solid #eee;
+        background: #f8f9fa;
+        border: 1px solid #e0e0e0;
         border-radius: 10px;
         padding: 16px;
     }}
@@ -124,22 +128,22 @@ st.markdown(f"""
 
     /* Success banner */
     .success-banner {{
-        background: #f8fdf9;
-        border: 2px solid #1a5632;
+        background: #f0f4ff;
+        border: 2px solid #003594;
         border-radius: 12px;
         padding: 2.5rem;
         text-align: center;
         margin: 2rem 0;
     }}
     .success-banner h2 {{
-        color: #1a5632;
+        color: #003594;
         margin-bottom: 0.5rem;
     }}
 
     /* Info notice */
     .info-notice {{
-        background: #f0f7f3;
-        border-left: 4px solid #1a5632;
+        background: #f0f4ff;
+        border-left: 4px solid #003594;
         padding: 12px 16px;
         border-radius: 0 8px 8px 0;
         margin-bottom: 1.5rem;
@@ -157,13 +161,14 @@ st.markdown(f"""
         font-size: 13px;
     }}
     .qvv-footer a {{
-        color: #1a5632;
+        color: #003594;
         text-decoration: none;
     }}
 
-    /* Hide Streamlit's default subheaders in favor of our styled ones */
-    .stForm h3 {{
-        display: none;
+    /* Label styling */
+    .stTextInput label, .stSelectbox label, .stDateInput label {{
+        color: #333 !important;
+        font-weight: 500 !important;
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -684,23 +689,25 @@ def page_customer_form():
     with st.form("appointment_form"):
 
         # Section 1: Contact Info
-        st.markdown('<div class="form-section"><h3>Contact Information</h3>', unsafe_allow_html=True)
+        st.markdown("**Contact Information**")
         col1, col2 = st.columns(2)
         with col1:
             full_name = st.text_input("Full Name *")
             email = st.text_input("Email Address *")
         with col2:
             phone = st.text_input("Phone Number *", placeholder="(951) 555-1234")
-        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.divider()
 
         # Section 2: Location
-        st.markdown('<div class="form-section"><h3>Appointment Location</h3>', unsafe_allow_html=True)
+        st.markdown("**Appointment Location**")
         address = st.text_input("Street Address *")
         city = st.selectbox("City *", options=["— Select your city —"] + ALL_CITIES, index=0)
-        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.divider()
 
         # Section 3: Vehicle
-        st.markdown('<div class="form-section"><h3>Vehicle Information</h3>', unsafe_allow_html=True)
+        st.markdown("**Vehicle Information**")
         col3, col4, col5 = st.columns(3)
         current_year = datetime.now().year
         with col3:
@@ -713,10 +720,11 @@ def page_customer_form():
             vehicle_make = st.text_input("Vehicle Make *", placeholder="e.g. Toyota")
         with col5:
             vehicle_model = st.text_input("Vehicle Model *", placeholder="e.g. Corolla")
-        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.divider()
 
         # Section 4: Schedule
-        st.markdown('<div class="form-section"><h3>Preferred Schedule</h3>', unsafe_allow_html=True)
+        st.markdown("**Preferred Schedule**")
         col6, col7 = st.columns(2)
         with col6:
             tomorrow = date.today() + timedelta(days=1)
@@ -734,8 +742,8 @@ def page_customer_form():
                 options=["— Select a time —"] + TIME_SLOTS,
                 index=0,
             )
-        st.markdown('</div>', unsafe_allow_html=True)
 
+        st.markdown("")  # Small spacer before button
         submitted = st.form_submit_button("Submit Appointment Request", use_container_width=True)
 
     # --- Footer ---
