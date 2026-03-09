@@ -24,52 +24,147 @@ from functools import lru_cache
 st.set_page_config(
     page_title="Quick VIN Verification — Scheduling",
     page_icon="🚗",
-    layout="wide",
+    layout="centered",
 )
 
 # ---------------------------------------------------------------------------
 # Hide Streamlit default header, footer, and hamburger menu
 # Apply QVV green branding (#1a5632)
 # ---------------------------------------------------------------------------
-st.markdown("""
+LOGO_URL = "https://www.vinverifications.com/wp-content/uploads/2021/08/quick-vin-verification-logo.png"
+
+st.markdown(f"""
 <style>
     /* Hide default Streamlit chrome */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
 
-    /* QVV brand green for primary elements */
-    .stButton > button {
-        background-color: #1a5632;
-        color: white;
-        border: none;
-        border-radius: 6px;
-        padding: 0.5rem 1.5rem;
-        font-weight: 600;
-    }
-    .stButton > button:hover {
-        background-color: #134025;
-        color: white;
-    }
+    /* Clean white background */
+    .stApp {{
+        background-color: #ffffff;
+    }}
+
+    /* Global font */
+    html, body, [class*="css"] {{
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: #333;
+    }}
+
+    /* Green CTA button */
+    .stButton > button,
+    .stFormSubmitButton > button {{
+        background-color: #1a5632 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 2rem !important;
+        font-weight: 600 !important;
+        font-size: 16px !important;
+        letter-spacing: 0.3px;
+        transition: background-color 0.2s ease;
+    }}
+    .stButton > button:hover,
+    .stFormSubmitButton > button:hover {{
+        background-color: #134025 !important;
+        color: white !important;
+    }}
+
+    /* Form input styling */
+    .stTextInput > div > div > input,
+    .stSelectbox > div > div,
+    .stDateInput > div > div > input {{
+        border-radius: 8px !important;
+        border: 1px solid #ddd !important;
+    }}
+    .stTextInput > div > div > input:focus {{
+        border-color: #1a5632 !important;
+        box-shadow: 0 0 0 1px #1a5632 !important;
+    }}
+
+    /* Section cards */
+    .form-section {{
+        background: #fafafa;
+        border: 1px solid #eee;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }}
+    .form-section h3 {{
+        color: #1a5632;
+        font-size: 18px;
+        margin-top: 0;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #1a5632;
+    }}
 
     /* Metric card styling */
-    div[data-testid="metric-container"] {
-        background: #f0f7f3;
-        border: 1px solid #1a5632;
-        border-radius: 8px;
-        padding: 12px;
-    }
+    div[data-testid="metric-container"] {{
+        background: #fafafa;
+        border: 1px solid #eee;
+        border-radius: 10px;
+        padding: 16px;
+    }}
+
+    /* Logo header */
+    .logo-header {{
+        text-align: center;
+        padding: 2rem 0 0.5rem 0;
+    }}
+    .logo-header img {{
+        max-width: 280px;
+        margin-bottom: 0.5rem;
+    }}
+    .logo-header p {{
+        color: #666;
+        font-size: 17px;
+        margin-top: 0.25rem;
+    }}
 
     /* Success banner */
-    .success-banner {
-        background: #f0f7f3;
+    .success-banner {{
+        background: #f8fdf9;
         border: 2px solid #1a5632;
         border-radius: 12px;
-        padding: 2rem;
+        padding: 2.5rem;
         text-align: center;
         margin: 2rem 0;
-    }
-    .success-banner h2 { color: #1a5632; }
+    }}
+    .success-banner h2 {{
+        color: #1a5632;
+        margin-bottom: 0.5rem;
+    }}
+
+    /* Info notice */
+    .info-notice {{
+        background: #f0f7f3;
+        border-left: 4px solid #1a5632;
+        padding: 12px 16px;
+        border-radius: 0 8px 8px 0;
+        margin-bottom: 1.5rem;
+        font-size: 14px;
+        color: #555;
+    }}
+
+    /* Footer */
+    .qvv-footer {{
+        text-align: center;
+        padding: 2rem 0 1rem 0;
+        margin-top: 2rem;
+        border-top: 1px solid #eee;
+        color: #999;
+        font-size: 13px;
+    }}
+    .qvv-footer a {{
+        color: #1a5632;
+        text-decoration: none;
+    }}
+
+    /* Hide Streamlit's default subheaders in favor of our styled ones */
+    .stForm h3 {{
+        display: none;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -370,6 +465,7 @@ def send_teams_webhook(appointment_data):
     Contains all lead details so the team can confirm via Bookings.
     Returns True on success, False on failure.
     """
+    display_date = format_date_display(appointment_data.get("preferred_date", ""))
     if not require_secrets("TEAMS_WEBHOOK_URL"):
         return False
     try:
@@ -401,7 +497,7 @@ def send_teams_webhook(appointment_data):
                                     {"title": "County", "value": appointment_data.get("county", "")},
                                     {"title": "Region", "value": appointment_data.get("region", "")},
                                     {"title": "Vehicle", "value": f"{appointment_data['vehicle_year']} {appointment_data['vehicle_make']} {appointment_data['vehicle_model']}"},
-                                    {"title": "Preferred Date", "value": appointment_data["preferred_date"]},
+                                    {"title": "Preferred Date", "value": display_date},
                                     {"title": "Preferred Time", "value": appointment_data["preferred_time"]},
                                 ],
                             },
@@ -431,6 +527,7 @@ def send_teams_webhook(appointment_data):
 
 def send_customer_confirmation_email(appt):
     """Send the customer a confirmation email with their appointment summary."""
+    display_date = format_date_display(appt['preferred_date'])
     html = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a5632; padding: 20px; text-align: center;">
@@ -443,7 +540,7 @@ def send_customer_confirmation_email(appt):
             <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
                 <tr><td style="padding: 8px; font-weight: bold;">Address:</td><td style="padding: 8px;">{appt['address']}, {appt['city']}, CA</td></tr>
                 <tr style="background: #eee;"><td style="padding: 8px; font-weight: bold;">Vehicle:</td><td style="padding: 8px;">{appt['vehicle_year']} {appt['vehicle_make']} {appt['vehicle_model']}</td></tr>
-                <tr><td style="padding: 8px; font-weight: bold;">Preferred Date:</td><td style="padding: 8px;">{appt['preferred_date']}</td></tr>
+                <tr><td style="padding: 8px; font-weight: bold;">Preferred Date:</td><td style="padding: 8px;">{display_date}</td></tr>
                 <tr style="background: #eee;"><td style="padding: 8px; font-weight: bold;">Preferred Time:</td><td style="padding: 8px;">{appt['preferred_time']}</td></tr>
             </table>
             <p><em>Your preferred date and time are not confirmed until a team member contacts you.</em></p>
@@ -461,10 +558,11 @@ def send_customer_confirmation_email(appt):
 
 def send_customer_confirmation_sms(appt):
     """Send the customer a short SMS confirming we received their request."""
+    display_date = format_date_display(appt['preferred_date'])
     msg = (
         f"Hi {appt['full_name']}! We received your VIN verification request "
         f"for a {appt['vehicle_year']} {appt['vehicle_make']} {appt['vehicle_model']} "
-        f"on {appt['preferred_date']} ({appt['preferred_time']}).\n\n"
+        f"on {display_date} ({appt['preferred_time']}).\n\n"
         f"A team member will contact you to confirm your appointment.\n\n"
         f"Questions? Call (951) 394-7012\n\n"
         f"Thank you,\n"
@@ -475,6 +573,7 @@ def send_customer_confirmation_sms(appt):
 
 def send_partner_notification_email(appt, partner_email):
     """Send partner verifier an email with all lead details."""
+    display_date = format_date_display(appt['preferred_date'])
     html = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a5632; padding: 20px; text-align: center;">
@@ -489,7 +588,7 @@ def send_partner_notification_email(appt, partner_email):
                 <tr><td style="padding: 8px; font-weight: bold;">Email:</td><td style="padding: 8px;">{appt['email']}</td></tr>
                 <tr style="background: #eee;"><td style="padding: 8px; font-weight: bold;">Address:</td><td style="padding: 8px;">{appt['address']}, {appt['city']}, CA</td></tr>
                 <tr><td style="padding: 8px; font-weight: bold;">Vehicle:</td><td style="padding: 8px;">{appt['vehicle_year']} {appt['vehicle_make']} {appt['vehicle_model']}</td></tr>
-                <tr style="background: #eee;"><td style="padding: 8px; font-weight: bold;">Preferred Date:</td><td style="padding: 8px;">{appt['preferred_date']}</td></tr>
+                <tr style="background: #eee;"><td style="padding: 8px; font-weight: bold;">Preferred Date:</td><td style="padding: 8px;">{display_date}</td></tr>
                 <tr><td style="padding: 8px; font-weight: bold;">Preferred Time:</td><td style="padding: 8px;">{appt['preferred_time']}</td></tr>
             </table>
             <hr style="border: 1px solid #ddd; margin: 20px 0;">
@@ -504,6 +603,7 @@ def send_partner_notification_email(appt, partner_email):
 
 def send_partner_notification_sms(appt, partner_phone):
     """Send partner verifier a compact SMS with lead details."""
+    display_date = format_date_display(appt['preferred_date'])
     msg = (
         f"This is a lead from Quick VIN Verification — Ekho\n\n"
         f"Customer: {appt['full_name']}\n"
@@ -511,7 +611,7 @@ def send_partner_notification_sms(appt, partner_phone):
         f"Email: {appt['email']}\n"
         f"Address: {appt['address']}, {appt['city']}, CA\n"
         f"Vehicle: {appt['vehicle_year']} {appt['vehicle_make']} {appt['vehicle_model']}\n"
-        f"Date: {appt['preferred_date']}\n"
+        f"Date: {display_date}\n"
         f"Time: {appt['preferred_time']}\n\n"
         f"Please contact the customer to confirm.\n\n"
         f"The payment will be sent to you by your partner Quick VIN Verification — "
@@ -523,19 +623,36 @@ def send_partner_notification_sms(appt, partner_phone):
 # ===========================================================================
 # PAGE: Customer Scheduling Form
 # ===========================================================================
+def format_date_display(d):
+    """Format a date as MM-DD-YYYY for display."""
+    if isinstance(d, str):
+        try:
+            d = datetime.strptime(d, "%Y-%m-%d").date()
+        except ValueError:
+            return d
+    return d.strftime("%m-%d-%Y")
+
+
 def page_customer_form():
     """Render the customer-facing VIN verification scheduling form."""
 
+    # --- Logo header ---
     st.markdown(
-        "<h1 style='color: #1a5632; text-align: center;'>"
-        "Quick VIN Verification</h1>"
-        "<h3 style='text-align: center; color: #444;'>"
-        "Schedule Your Mobile VIN Verification Appointment</h3>",
+        f"""
+        <div class="logo-header">
+            <img src="{LOGO_URL}" alt="Quick VIN Verification">
+            <p>Schedule Your Mobile VIN Verification Appointment</p>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
-    st.info(
-        "Your preferred date and time are not confirmed until a team member contacts you."
+    # --- Info notice ---
+    st.markdown(
+        '<div class="info-notice">'
+        'Your preferred date and time are <strong>not confirmed</strong> until a team member contacts you.'
+        '</div>',
+        unsafe_allow_html=True,
     )
 
     # If we just submitted successfully, show the success screen
@@ -543,12 +660,17 @@ def page_customer_form():
         st.markdown(
             """
             <div class="success-banner">
+                <div style="font-size: 48px; margin-bottom: 0.5rem;">&#10003;</div>
                 <h2>Appointment Request Submitted!</h2>
-                <p style="font-size: 18px;">Someone from our team will contact you shortly to confirm your appointment.</p>
-                <p style="margin-top: 1rem;">
-                    <strong>Phone:</strong> (951) 394-7012<br>
-                    <strong>Website:</strong> <a href="https://www.vinverifications.com">vinverifications.com</a>
+                <p style="font-size: 17px; color: #555; margin-top: 0.5rem;">
+                    Someone from our team will contact you shortly to confirm your appointment.
                 </p>
+                <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #e0e0e0;">
+                    <p style="margin: 0; color: #666;">
+                        <strong>Phone:</strong> (951) 394-7012<br>
+                        <strong>Website:</strong> <a href="https://www.vinverifications.com" style="color: #1a5632;">vinverifications.com</a>
+                    </p>
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -560,33 +682,41 @@ def page_customer_form():
 
     # --- The scheduling form ---
     with st.form("appointment_form"):
-        st.subheader("Your Information")
+
+        # Section 1: Contact Info
+        st.markdown('<div class="form-section"><h3>Contact Information</h3>', unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
             full_name = st.text_input("Full Name *")
             email = st.text_input("Email Address *")
         with col2:
-            phone = st.text_input("Phone Number *")
+            phone = st.text_input("Phone Number *", placeholder="(951) 555-1234")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-        st.subheader("Appointment Location")
+        # Section 2: Location
+        st.markdown('<div class="form-section"><h3>Appointment Location</h3>', unsafe_allow_html=True)
         address = st.text_input("Street Address *")
-        city = st.selectbox("City *", options=[""] + ALL_CITIES, index=0)
+        city = st.selectbox("City *", options=["— Select your city —"] + ALL_CITIES, index=0)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-        st.subheader("Vehicle Information")
+        # Section 3: Vehicle
+        st.markdown('<div class="form-section"><h3>Vehicle Information</h3>', unsafe_allow_html=True)
         col3, col4, col5 = st.columns(3)
         current_year = datetime.now().year
         with col3:
             vehicle_year = st.selectbox(
                 "Vehicle Year *",
-                options=[""] + [str(y) for y in range(current_year + 1, 1979, -1)],
+                options=["— Year —"] + [str(y) for y in range(current_year + 1, 1979, -1)],
                 index=0,
             )
         with col4:
-            vehicle_make = st.text_input("Vehicle Make *")
+            vehicle_make = st.text_input("Vehicle Make *", placeholder="e.g. Toyota")
         with col5:
-            vehicle_model = st.text_input("Vehicle Model *")
+            vehicle_model = st.text_input("Vehicle Model *", placeholder="e.g. Corolla")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-        st.subheader("Preferred Schedule")
+        # Section 4: Schedule
+        st.markdown('<div class="form-section"><h3>Preferred Schedule</h3>', unsafe_allow_html=True)
         col6, col7 = st.columns(2)
         with col6:
             tomorrow = date.today() + timedelta(days=1)
@@ -596,11 +726,26 @@ def page_customer_form():
                 value=tomorrow,
                 min_value=tomorrow,
                 max_value=max_date,
+                format="MM/DD/YYYY",
             )
         with col7:
-            preferred_time = st.selectbox("Preferred Time *", options=[""] + TIME_SLOTS, index=0)
+            preferred_time = st.selectbox(
+                "Preferred Time *",
+                options=["— Select a time —"] + TIME_SLOTS,
+                index=0,
+            )
+        st.markdown('</div>', unsafe_allow_html=True)
 
         submitted = st.form_submit_button("Submit Appointment Request", use_container_width=True)
+
+    # --- Footer ---
+    st.markdown(
+        f'<div class="qvv-footer">'
+        f'<img src="{LOGO_URL}" alt="QVV" style="max-width: 120px; opacity: 0.5; margin-bottom: 0.5rem;"><br>'
+        f'(951) 394-7012 &nbsp;|&nbsp; <a href="https://www.vinverifications.com">vinverifications.com</a>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
     if submitted:
         # --- Validation ---
@@ -613,15 +758,15 @@ def page_customer_form():
             errors.append("Phone Number is required.")
         if not address.strip():
             errors.append("Street Address is required.")
-        if not city:
+        if not city or city == "— Select your city —":
             errors.append("City is required.")
-        if not vehicle_year:
+        if not vehicle_year or vehicle_year == "— Year —":
             errors.append("Vehicle Year is required.")
         if not vehicle_make.strip():
             errors.append("Vehicle Make is required.")
         if not vehicle_model.strip():
             errors.append("Vehicle Model is required.")
-        if not preferred_time:
+        if not preferred_time or preferred_time == "— Select a time —":
             errors.append("Preferred Time is required.")
 
         if errors:
