@@ -689,7 +689,7 @@ def page_customer_form():
     with st.form("appointment_form"):
 
         # Section 1: Contact Info
-        st.markdown("**Contact Information**")
+        st.markdown('<p style="font-size: 18px; font-weight: 700; color: #003594; margin-bottom: 0.25rem;">Contact Information</p>', unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
             full_name = st.text_input("Full Name *")
@@ -700,14 +700,14 @@ def page_customer_form():
         st.divider()
 
         # Section 2: Location
-        st.markdown("**Appointment Location**")
+        st.markdown('<p style="font-size: 18px; font-weight: 700; color: #003594; margin-bottom: 0.25rem;">Appointment Location</p>', unsafe_allow_html=True)
         address = st.text_input("Street Address *")
         city = st.selectbox("City *", options=["— Select your city —"] + ALL_CITIES, index=0)
 
         st.divider()
 
         # Section 3: Vehicle
-        st.markdown("**Vehicle Information**")
+        st.markdown('<p style="font-size: 18px; font-weight: 700; color: #003594; margin-bottom: 0.25rem;">Vehicle Information</p>', unsafe_allow_html=True)
         col3, col4, col5 = st.columns(3)
         current_year = datetime.now().year
         with col3:
@@ -724,7 +724,7 @@ def page_customer_form():
         st.divider()
 
         # Section 4: Schedule
-        st.markdown("**Preferred Schedule**")
+        st.markdown('<p style="font-size: 18px; font-weight: 700; color: #003594; margin-bottom: 0.25rem;">Preferred Schedule</p>', unsafe_allow_html=True)
         col6, col7 = st.columns(2)
         with col6:
             tomorrow = date.today() + timedelta(days=1)
