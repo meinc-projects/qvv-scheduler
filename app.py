@@ -170,6 +170,23 @@ st.markdown(f"""
         color: #333 !important;
         font-weight: 500 !important;
     }}
+
+    /* Reduce white space between form sections */
+    [data-testid="stForm"] hr {{
+        margin-top: 0.4rem !important;
+        margin-bottom: 0.4rem !important;
+    }}
+    [data-testid="stForm"] [data-testid="stVerticalBlock"] > div {{
+        gap: 0rem !important;
+    }}
+    [data-testid="stForm"] .stMarkdown p {{
+        margin-bottom: 0.2rem !important;
+    }}
+
+    /* Tighten overall block gap inside form */
+    [data-testid="stForm"] [data-testid="stVerticalBlockBorderWrapper"] {{
+        padding: 1rem !important;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -689,7 +706,7 @@ def page_customer_form():
     with st.form("appointment_form"):
 
         # Section 1: Contact Info
-        st.markdown('<p style="font-size: 18px; font-weight: 700; color: #003594; margin-bottom: 0.25rem;">Contact Information</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-size: 18px; font-weight: 700; color: #003594; margin: 0.1rem 0 0.25rem 0;">Contact Information</p>', unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
             full_name = st.text_input("Full Name *")
@@ -700,14 +717,14 @@ def page_customer_form():
         st.divider()
 
         # Section 2: Location
-        st.markdown('<p style="font-size: 18px; font-weight: 700; color: #003594; margin-bottom: 0.25rem;">Appointment Location</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-size: 18px; font-weight: 700; color: #003594; margin: 0.1rem 0 0.25rem 0;">Appointment Location</p>', unsafe_allow_html=True)
         address = st.text_input("Street Address *")
         city = st.selectbox("City *", options=["— Select your city —"] + ALL_CITIES, index=0)
 
         st.divider()
 
         # Section 3: Vehicle
-        st.markdown('<p style="font-size: 18px; font-weight: 700; color: #003594; margin-bottom: 0.25rem;">Vehicle Information</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-size: 18px; font-weight: 700; color: #003594; margin: 0.1rem 0 0.25rem 0;">Vehicle Information</p>', unsafe_allow_html=True)
         col3, col4, col5 = st.columns(3)
         current_year = datetime.now().year
         with col3:
@@ -724,7 +741,7 @@ def page_customer_form():
         st.divider()
 
         # Section 4: Schedule
-        st.markdown('<p style="font-size: 18px; font-weight: 700; color: #003594; margin-bottom: 0.25rem;">Preferred Schedule</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-size: 18px; font-weight: 700; color: #003594; margin: 0.1rem 0 0.25rem 0;">Preferred Schedule</p>', unsafe_allow_html=True)
         col6, col7 = st.columns(2)
         with col6:
             tomorrow = date.today() + timedelta(days=1)
