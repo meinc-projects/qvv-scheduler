@@ -46,6 +46,11 @@ st.markdown(f"""
         background-color: #ffffff !important;
     }}
 
+    /* Kill Streamlit's massive default top padding */
+    .block-container {{
+        padding-top: 1rem !important;
+    }}
+
     /* Force all form inputs to white background with dark text */
     input, select, textarea,
     .stTextInput > div > div > input,
@@ -114,7 +119,7 @@ st.markdown(f"""
     /* Logo header */
     .logo-header {{
         text-align: center;
-        padding: 2rem 0 0.5rem 0;
+        padding: 0.5rem 0 0.5rem 0;
     }}
     .logo-header img {{
         max-width: 280px;
