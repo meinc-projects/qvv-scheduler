@@ -478,10 +478,11 @@ def send_partner_notification_email(appt, partner_email):
     html = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a5632; padding: 20px; text-align: center;">
-            <h1 style="color: white; margin: 0;">New Lead — Ekho Scheduling Portal</h1>
+            <h1 style="color: white; margin: 0;">New Lead — Quick VIN Verification</h1>
         </div>
         <div style="padding: 20px; background: #f9f9f9;">
-            <p>You have a new VIN verification lead from the Ekho scheduling portal:</p>
+            <p style="font-size: 16px; font-weight: bold; color: #1a5632;">This is a lead from Quick VIN Verification — Ekho</p>
+            <p>Please contact the customer below to confirm their VIN verification appointment:</p>
             <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
                 <tr><td style="padding: 8px; font-weight: bold;">Customer:</td><td style="padding: 8px;">{appt['full_name']}</td></tr>
                 <tr style="background: #eee;"><td style="padding: 8px; font-weight: bold;">Phone:</td><td style="padding: 8px;">{appt['phone']}</td></tr>
@@ -491,7 +492,10 @@ def send_partner_notification_email(appt, partner_email):
                 <tr style="background: #eee;"><td style="padding: 8px; font-weight: bold;">Preferred Date:</td><td style="padding: 8px;">{appt['preferred_date']}</td></tr>
                 <tr><td style="padding: 8px; font-weight: bold;">Preferred Time:</td><td style="padding: 8px;">{appt['preferred_time']}</td></tr>
             </table>
-            <p>Please contact the customer to confirm the appointment.</p>
+            <hr style="border: 1px solid #ddd; margin: 20px 0;">
+            <p style="font-size: 13px; color: #666;">
+                The payment will be sent to you by your partner Quick VIN Verification — the price for this VIN verification is fixed. Any questions, please contact your partner.
+            </p>
         </div>
     </div>
     """
@@ -501,10 +505,17 @@ def send_partner_notification_email(appt, partner_email):
 def send_partner_notification_sms(appt, partner_phone):
     """Send partner verifier a compact SMS with lead details."""
     msg = (
-        f"New VIN lead from Ekho: {appt['full_name']}, "
-        f"Ph: {appt['phone']}, {appt['city']}, "
-        f"{appt['vehicle_year']} {appt['vehicle_make']} {appt['vehicle_model']}, "
-        f"Date: {appt['preferred_date']} {appt['preferred_time']}"
+        f"This is a lead from Quick VIN Verification — Ekho\n\n"
+        f"Customer: {appt['full_name']}\n"
+        f"Phone: {appt['phone']}\n"
+        f"Email: {appt['email']}\n"
+        f"Address: {appt['address']}, {appt['city']}, CA\n"
+        f"Vehicle: {appt['vehicle_year']} {appt['vehicle_make']} {appt['vehicle_model']}\n"
+        f"Date: {appt['preferred_date']}\n"
+        f"Time: {appt['preferred_time']}\n\n"
+        f"Please contact the customer to confirm.\n\n"
+        f"The payment will be sent to you by your partner Quick VIN Verification — "
+        f"the price for this VV is fixed. Any questions, please contact your partner."
     )
     return send_sms(partner_phone, msg)
 
