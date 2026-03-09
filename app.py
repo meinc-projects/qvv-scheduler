@@ -246,6 +246,24 @@ def require_secrets(*keys):
     return True
 
 
+def format_phone_e164(phone_str):
+    """
+    Clean a phone number and add +1 prefix for US numbers.
+    Customers just type 10 digits like 9515551234 or (951) 555-1234.
+    Returns formatted number like +19515551234.
+    """
+    # Strip everything except digits
+    digits = "".join(c for c in phone_str if c.isdigit())
+    # If they typed 11 digits starting with 1, already has country code
+    if len(digits) == 11 and digits.startswith("1"):
+        return f"+{digits}"
+    # Standard 10-digit US number — add +1
+    if len(digits) == 10:
+        return f"+1{digits}"
+    # Fallback: return whatever we got with +1
+    return f"+1{digits}"
+
+
 # ===========================================================================
 # SUPABASE CLIENT (cached so we only create one per session)
 # ===========================================================================
@@ -287,23 +305,22 @@ def geocode_address(address, city):
 
 def send_email(to_address, subject, html_body):
     """
-    Send an HTML email via Microsoft 365 SMTP.
+    Send an HTML email via Zoho Mail SMTP.
     Returns True on success, False on failure (logs error to st.error).
     """
-    if not require_secrets("M365_EMAIL", "M365_APP_PASSWORD"):
+    if not require_secrets("ZOHO_EMAIL", "ZOHO_APP_PASSWORD"):
         return False
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = st.secrets["M365_EMAIL"]
+        msg["From"] = st.secrets["ZOHO_EMAIL"]
         msg["To"] = to_address
         msg.attach(MIMEText(html_body, "html"))
 
-        # Connect to M365 SMTP with STARTTLS
-        with smtplib.SMTP("smtp.office365.com", 587) as server:
-            server.starttls()
-            server.login(st.secrets["M365_EMAIL"], st.secrets["M365_APP_PASSWORD"])
-            server.sendmail(st.secrets["M365_EMAIL"], to_address, msg.as_string())
+        # Connect to Zoho SMTP with SSL on port 465
+        with smtplib.SMTP_SSL("smtp.zoho.com", 465) as server:
+            server.login(st.secrets["ZOHO_EMAIL"], st.secrets["ZOHO_APP_PASSWORD"])
+            server.sendmail(st.secrets["ZOHO_EMAIL"], to_address, msg.as_string())
         return True
     except Exception as e:
         st.error(f"Email send failed: {e}")
@@ -327,12 +344,16 @@ def send_sms(to_number, message_text):
         platform = sdk.platform()
         platform.login(jwt=st.secrets["RC_JWT"])
 
+        # Format phone numbers with +1 prefix automatically
+        formatted_to = format_phone_e164(to_number)
+        formatted_from = format_phone_e164(st.secrets["RC_FROM_NUMBER"])
+
         # Send SMS via RingCentral API
         platform.post(
             "/restapi/v1.0/account/~/extension/~/sms",
             {
-                "from": {"phoneNumber": st.secrets["RC_FROM_NUMBER"]},
-                "to": [{"phoneNumber": to_number}],
+                "from": {"phoneNumber": formatted_from},
+                "to": [{"phoneNumber": formatted_to}],
                 "text": message_text,
             },
         )
