@@ -10,9 +10,7 @@ Pages:
 """
 
 import streamlit as st
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import requests
 from datetime import datetime, timedelta, date
 from functools import lru_cache
 
@@ -429,28 +427,37 @@ EKHO_CC = "support@ekho.com"
 
 def send_email(to_address, subject, html_body, cc=None):
     """
-    Send an HTML email via Zoho Mail SMTP. Optionally CC an address.
+    Send an HTML email via the SendGrid API. Optionally CC an address.
+    From address comes from SENDGRID_FROM_EMAIL (must be a verified sender
+    or on an authenticated domain in SendGrid); replies go to the leads inbox.
     Returns True on success, False on failure (logs error to st.error).
     """
-    if not require_secrets("ZOHO_EMAIL", "ZOHO_APP_PASSWORD"):
+    if not require_secrets("SENDGRID_API_KEY", "SENDGRID_FROM_EMAIL"):
         return False
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"Quick VIN Verification <{st.secrets['ZOHO_EMAIL']}>"
-        msg["To"] = to_address
-        msg["Reply-To"] = "leads@quickautotags.com"
-        recipients = [to_address]
+        personalization = {"to": [{"email": to_address}]}
         if cc:
-            msg["Cc"] = cc
-            recipients.append(cc)
-        msg.attach(MIMEText(html_body, "html"))
-
-        # Connect to Zoho SMTP with SSL on port 465
-        with smtplib.SMTP_SSL("smtp.zoho.com", 465) as server:
-            server.login(st.secrets["ZOHO_EMAIL"], st.secrets["ZOHO_APP_PASSWORD"])
-            server.sendmail(st.secrets["ZOHO_EMAIL"], recipients, msg.as_string())
-        return True
+            personalization["cc"] = [{"email": cc}]
+        payload = {
+            "personalizations": [personalization],
+            "from": {
+                "email": st.secrets["SENDGRID_FROM_EMAIL"],
+                "name": "Quick VIN Verification",
+            },
+            "reply_to": {"email": "leads@quickautotags.com"},
+            "subject": subject,
+            "content": [{"type": "text/html", "value": html_body}],
+        }
+        resp = requests.post(
+            "https://api.sendgrid.com/v3/mail/send",
+            json=payload,
+            headers={"Authorization": f"Bearer {st.secrets['SENDGRID_API_KEY']}"},
+            timeout=15,
+        )
+        if resp.status_code == 202:
+            return True
+        st.error(f"Email send failed: {resp.status_code} {resp.text[:300]}")
+        return False
     except Exception as e:
         st.error(f"Email send failed: {e}")
         return False

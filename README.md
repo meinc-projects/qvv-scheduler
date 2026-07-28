@@ -25,7 +25,7 @@ Streamlit web app for scheduling VIN verification appointments across Southern C
 - **QVV leads** send email + SMS to the QVV team (`QVV_LEADS_EMAIL` / `QVV_LEADS_PHONE`)
 - **Partner leads** send email + SMS to the assigned partner verifier
 - **Ekho** (`support@ekho.com`) is CC'd on every lead notification email (constant `EKHO_CC` in `app.py`)
-- **Email From:** Quick VIN Verification (via Zoho Mail SMTP)
+- **Email From:** Quick VIN Verification (via SendGrid, `SENDGRID_FROM_EMAIL`)
 - **Reply-To:** leads@quickautotags.com (TeamInbox shared inbox)
 - **SMS From:** (951) 394-7012 via RingCentral
 - **Phone numbers** are auto-formatted with +1 prefix on the backend
@@ -35,7 +35,7 @@ Streamlit web app for scheduling VIN verification appointments across Southern C
 - **Streamlit** — UI framework
 - **Supabase** — PostgreSQL database (free tier)
 - **RingCentral** — SMS notifications
-- **Zoho Mail SMTP** — Email notifications (smtp.zoho.com:465 SSL)
+- **SendGrid** — Email notifications (HTTP API)
 - **Folium** — Interactive dispatch map
 - **geopy (Nominatim)** — Free address geocoding
 
@@ -63,12 +63,12 @@ cd qvv-scheduler
 4. Generate a **JWT credential** under your app's Credentials tab
 5. Note your Client ID, Client Secret, JWT, and the phone number to send from
 
-### 4. Set up Zoho Mail (Email Sending)
+### 4. Set up SendGrid (Email Sending)
 
-1. Log in to [mail.zoho.com](https://mail.zoho.com)
-2. Go to **Settings → Security → App Passwords**
-3. Generate an **App Password** for the Streamlit app
-4. Use your Zoho email address and the app password
+1. Create an API key at [app.sendgrid.com](https://app.sendgrid.com) → Settings → API Keys (Mail Send permission)
+2. Verify the From address: either a **Single Sender** or **Domain Authentication**
+   (Settings → Sender Authentication; domain auth = 3 CNAME records at your DNS host)
+3. Use the key as `SENDGRID_API_KEY` and the verified address as `SENDGRID_FROM_EMAIL`
 
 ### 5. Configure Secrets
 
@@ -89,8 +89,8 @@ cp secrets.toml.template .streamlit/secrets.toml
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_KEY` | Supabase anon/public key |
 | `ADMIN_PASSWORD` | Password for the admin panel |
-| `ZOHO_EMAIL` | Zoho Mail email address (sender) |
-| `ZOHO_APP_PASSWORD` | Zoho Mail app password |
+| `SENDGRID_API_KEY` | SendGrid API key (Mail Send permission) |
+| `SENDGRID_FROM_EMAIL` | Verified From address for all outgoing email |
 | `RC_CLIENT_ID` | RingCentral app Client ID |
 | `RC_CLIENT_SECRET` | RingCentral app Client Secret |
 | `RC_JWT` | RingCentral JWT credential |
@@ -142,3 +142,4 @@ streamlit run app.py
 | 2026-03-08 | UI overhaul — logo header, white background, blue CTA (#003594), date format MM-DD-YYYY |
 | 2026-03-08 | Section headers styled bold blue, reduced white space between form sections |
 | 2026-07-28 | Removed Teams webhook — QVV leads now email + SMS via `QVV_LEADS_EMAIL`/`QVV_LEADS_PHONE`. San Fernando Valley reassigned from Michael to Henry Alvarez (Michael no longer a partner). Ekho (support@ekho.com) CC'd on all lead emails. Redeployed at qvv-scheduler.streamlit.app |
+| 2026-07-28 | Email switched from Zoho SMTP to SendGrid API — From address now configurable via `SENDGRID_FROM_EMAIL` (leads@quickautotags.com after domain auth) |
