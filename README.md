@@ -2,7 +2,7 @@
 
 Streamlit web app for scheduling VIN verification appointments across Southern California. Leads route to Quick VIN Verification (QVV) or partner verifiers based on the customer's city.
 
-**Live App:** [qvv-scheduler-2oddtjvyxumtrxf5qdsipv.streamlit.app](https://qvv-scheduler-2oddtjvyxumtrxf5qdsipv.streamlit.app/)
+**Live App:** [qvv-scheduler.streamlit.app](https://qvv-scheduler.streamlit.app/) (redeployed 2026-07-28; the original March URL is dead)
 
 ## What It Does
 
@@ -13,16 +13,18 @@ Streamlit web app for scheduling VIN verification appointments across Southern C
 
 | Territory | Cities | Routing |
 |-----------|--------|---------|
-| **QVV** | Riverside, San Bernardino, Orange County | Teams webhook → confirm via Bookings |
-| **Henry** | LA / South LA (Los Angeles, Long Beach, etc.) | Email + SMS to partner |
-| **Michael** | San Fernando Valley (Burbank, Glendale, etc.) | Email + SMS to partner |
+| **QVV** | Riverside, San Bernardino, Orange County | Email + SMS to QVV team → confirm via Bookings |
+| **Henry** | LA / South LA (Los Angeles, Long Beach, etc.) **and** San Fernando Valley (Burbank, Glendale, etc.) | Email + SMS to partner |
 | **Joy** | San Diego County (San Diego, Chula Vista, etc.) | Email + SMS to partner |
+
+> San Fernando Valley was Michael's territory until 2026-07; Henry Alvarez took it over.
 
 ### Notifications
 
 - **Customer** receives a confirmation email + SMS immediately after booking
-- **QVV leads** post to Microsoft Teams channel via Adaptive Card webhook
+- **QVV leads** send email + SMS to the QVV team (`QVV_LEADS_EMAIL` / `QVV_LEADS_PHONE`)
 - **Partner leads** send email + SMS to the assigned partner verifier
+- **Ekho** (`support@ekho.com`) is CC'd on every lead notification email (constant `EKHO_CC` in `app.py`)
 - **Email From:** Quick VIN Verification (via Zoho Mail SMTP)
 - **Reply-To:** leads@quickautotags.com (TeamInbox shared inbox)
 - **SMS From:** (951) 394-7012 via RingCentral
@@ -34,7 +36,6 @@ Streamlit web app for scheduling VIN verification appointments across Southern C
 - **Supabase** — PostgreSQL database (free tier)
 - **RingCentral** — SMS notifications
 - **Zoho Mail SMTP** — Email notifications (smtp.zoho.com:465 SSL)
-- **Microsoft Teams Webhook** — Team lead notifications (Adaptive Cards)
 - **Folium** — Interactive dispatch map
 - **geopy (Nominatim)** — Free address geocoding
 
@@ -69,13 +70,7 @@ cd qvv-scheduler
 3. Generate an **App Password** for the Streamlit app
 4. Use your Zoho email address and the app password
 
-### 5. Set up Teams Webhook
-
-1. In Microsoft Teams, go to the channel for lead notifications
-2. Click the `...` menu → **Connectors** (or **Workflows** for newer Teams)
-3. Add **Incoming Webhook**, give it a name, copy the URL
-
-### 6. Configure Secrets
+### 5. Configure Secrets
 
 **For local development:** Create `.streamlit/secrets.toml` using `secrets.toml.template` as a guide.
 
@@ -100,22 +95,21 @@ cp secrets.toml.template .streamlit/secrets.toml
 | `RC_CLIENT_SECRET` | RingCentral app Client Secret |
 | `RC_JWT` | RingCentral JWT credential |
 | `RC_FROM_NUMBER` | RingCentral phone number (with +1) |
-| `TEAMS_WEBHOOK_URL` | Microsoft Teams incoming webhook URL |
+| `QVV_LEADS_EMAIL` | QVV team email for QVV-territory lead notifications (optional) |
+| `QVV_LEADS_PHONE` | QVV team phone for QVV-territory lead SMS (optional) |
 | `PARTNER_HENRY_EMAIL` | Henry's email for lead notifications |
 | `PARTNER_HENRY_PHONE` | Henry's phone for SMS notifications |
-| `PARTNER_MICHAEL_EMAIL` | Michael's email for lead notifications |
-| `PARTNER_MICHAEL_PHONE` | Michael's phone for SMS notifications |
 | `PARTNER_JOY_EMAIL` | Joy's email for lead notifications |
 | `PARTNER_JOY_PHONE` | Joy's phone for SMS notifications |
 
-### 7. Run Locally
+### 6. Run Locally
 
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-### 8. Deploy to Streamlit Cloud
+### 7. Deploy to Streamlit Cloud
 
 1. Push code to GitHub
 2. Go to [share.streamlit.io](https://share.streamlit.io)
@@ -147,3 +141,4 @@ streamlit run app.py
 | 2026-03-08 | Partner notification branding — Ekho attribution, fixed price footer |
 | 2026-03-08 | UI overhaul — logo header, white background, blue CTA (#003594), date format MM-DD-YYYY |
 | 2026-03-08 | Section headers styled bold blue, reduced white space between form sections |
+| 2026-07-28 | Removed Teams webhook — QVV leads now email + SMS via `QVV_LEADS_EMAIL`/`QVV_LEADS_PHONE`. San Fernando Valley reassigned from Michael to Henry Alvarez (Michael no longer a partner). Ekho (support@ekho.com) CC'd on all lead emails. Redeployed at qvv-scheduler.streamlit.app |

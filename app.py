@@ -11,8 +11,6 @@ Pages:
 
 import streamlit as st
 import smtplib
-import json
-import requests
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta, date
@@ -204,7 +202,7 @@ st.markdown(f"""
 
 # Helper to build city entries quickly
 def _qvv(city, county, region):
-    """Create a QVV territory entry (routes to Microsoft Bookings via Teams)."""
+    """Create a QVV territory entry (QVV team notified by email/SMS, confirms via Bookings)."""
     return {
         "territory_key": "qvv",
         "territory_label": "Quick VIN Verification",
@@ -298,22 +296,22 @@ CITY_TERRITORIES = {
     "Paramount":          _partner("Paramount", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
     "Bellflower":         _partner("Bellflower", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
     "Lakewood":           _partner("Lakewood", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    # --- Partner: Michael (San Fernando Valley) ---
-    "North Hollywood":    _partner("North Hollywood", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Van Nuys":           _partner("Van Nuys", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Burbank":            _partner("Burbank", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Glendale":           _partner("Glendale", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Pasadena":           _partner("Pasadena", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Sherman Oaks":       _partner("Sherman Oaks", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Encino":             _partner("Encino", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Woodland Hills":     _partner("Woodland Hills", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Canoga Park":        _partner("Canoga Park", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Reseda":             _partner("Reseda", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Northridge":         _partner("Northridge", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Panorama City":      _partner("Panorama City", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Sun Valley":         _partner("Sun Valley", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Sylmar":             _partner("Sylmar", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Tarzana":            _partner("Tarzana", "michael", "Michael — San Fernando Valley", "Los Angeles County", "sfv"),
+    # --- Partner: Henry (San Fernando Valley — took over from Michael, 2026-07) ---
+    "North Hollywood":    _partner("North Hollywood", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
+    "Van Nuys":           _partner("Van Nuys", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
+    "Burbank":            _partner("Burbank", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
+    "Glendale":           _partner("Glendale", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
+    "Pasadena":           _partner("Pasadena", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
+    "Sherman Oaks":       _partner("Sherman Oaks", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
+    "Encino":             _partner("Encino", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
+    "Woodland Hills":     _partner("Woodland Hills", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
+    "Canoga Park":        _partner("Canoga Park", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
+    "Reseda":             _partner("Reseda", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
+    "Northridge":         _partner("Northridge", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
+    "Panorama City":      _partner("Panorama City", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
+    "Sun Valley":         _partner("Sun Valley", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
+    "Sylmar":             _partner("Sylmar", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
+    "Tarzana":            _partner("Tarzana", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
     # --- Partner: Joy (San Diego County) ---
     "San Diego":          _partner("San Diego", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
     "Chula Vista":        _partner("Chula Vista", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
@@ -425,9 +423,13 @@ def geocode_address(address, city):
 # NOTIFICATION FUNCTIONS
 # ===========================================================================
 
-def send_email(to_address, subject, html_body):
+# Ekho (the lead source) is CC'd on every lead notification email
+EKHO_CC = "support@ekho.com"
+
+
+def send_email(to_address, subject, html_body, cc=None):
     """
-    Send an HTML email via Zoho Mail SMTP.
+    Send an HTML email via Zoho Mail SMTP. Optionally CC an address.
     Returns True on success, False on failure (logs error to st.error).
     """
     if not require_secrets("ZOHO_EMAIL", "ZOHO_APP_PASSWORD"):
@@ -438,12 +440,16 @@ def send_email(to_address, subject, html_body):
         msg["From"] = f"Quick VIN Verification <{st.secrets['ZOHO_EMAIL']}>"
         msg["To"] = to_address
         msg["Reply-To"] = "leads@quickautotags.com"
+        recipients = [to_address]
+        if cc:
+            msg["Cc"] = cc
+            recipients.append(cc)
         msg.attach(MIMEText(html_body, "html"))
 
         # Connect to Zoho SMTP with SSL on port 465
         with smtplib.SMTP_SSL("smtp.zoho.com", 465) as server:
             server.login(st.secrets["ZOHO_EMAIL"], st.secrets["ZOHO_APP_PASSWORD"])
-            server.sendmail(st.secrets["ZOHO_EMAIL"], to_address, msg.as_string())
+            server.sendmail(st.secrets["ZOHO_EMAIL"], recipients, msg.as_string())
         return True
     except Exception as e:
         st.error(f"Email send failed: {e}")
@@ -486,70 +492,60 @@ def send_sms(to_number, message_text):
         return False
 
 
-def send_teams_webhook(appointment_data):
+def notify_qvv_team(appt):
     """
-    Send an Adaptive Card to Microsoft Teams via Incoming Webhook.
-    Contains all lead details so the team can confirm via Bookings.
-    Returns True on success, False on failure.
+    Notify the QVV team of a new lead in their territory by email + SMS.
+    Destinations come from the QVV_LEADS_EMAIL / QVV_LEADS_PHONE secrets.
+    Either may be unset — that channel is skipped silently so the customer
+    never sees an error; the lead is still saved and visible in the admin panel.
+    Returns True if at least one notification went out.
     """
-    display_date = format_date_display(appointment_data.get("preferred_date", ""))
-    if not require_secrets("TEAMS_WEBHOOK_URL"):
-        return False
-    try:
-        # Build the Adaptive Card payload
-        card = {
-            "type": "message",
-            "attachments": [
-                {
-                    "contentType": "application/vnd.microsoft.card.adaptive",
-                    "content": {
-                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                        "type": "AdaptiveCard",
-                        "version": "1.4",
-                        "body": [
-                            {
-                                "type": "TextBlock",
-                                "size": "Large",
-                                "weight": "Bolder",
-                                "text": "New VIN Verification Lead (Ekho)",
-                                "color": "Good",
-                            },
-                            {
-                                "type": "FactSet",
-                                "facts": [
-                                    {"title": "Customer", "value": appointment_data["full_name"]},
-                                    {"title": "Phone", "value": appointment_data["phone"]},
-                                    {"title": "Email", "value": appointment_data["email"]},
-                                    {"title": "Address", "value": f"{appointment_data['address']}, {appointment_data['city']}"},
-                                    {"title": "County", "value": appointment_data.get("county", "")},
-                                    {"title": "Region", "value": appointment_data.get("region", "")},
-                                    {"title": "Vehicle", "value": f"{appointment_data['vehicle_year']} {appointment_data['vehicle_make']} {appointment_data['vehicle_model']}"},
-                                    {"title": "Preferred Date", "value": display_date},
-                                    {"title": "Preferred Time", "value": appointment_data["preferred_time"]},
-                                ],
-                            },
-                            {
-                                "type": "TextBlock",
-                                "text": "Please confirm this appointment via Microsoft Bookings.",
-                                "wrap": True,
-                                "weight": "Bolder",
-                                "color": "Attention",
-                            },
-                        ],
-                    },
-                }
-            ],
-        }
-        resp = requests.post(
-            st.secrets["TEAMS_WEBHOOK_URL"],
-            json=card,
-            headers={"Content-Type": "application/json"},
-            timeout=15,
+    display_date = format_date_display(appt.get("preferred_date", ""))
+    notified = False
+
+    qvv_email = get_secret("QVV_LEADS_EMAIL")
+    if qvv_email:
+        html = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: #1a5632; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0;">New VIN Verification Lead (Ekho)</h1>
+            </div>
+            <div style="padding: 20px; background: #f9f9f9;">
+                <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                    <tr><td style="padding: 8px; font-weight: bold;">Customer:</td><td style="padding: 8px;">{appt['full_name']}</td></tr>
+                    <tr style="background: #eee;"><td style="padding: 8px; font-weight: bold;">Phone:</td><td style="padding: 8px;">{appt['phone']}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Email:</td><td style="padding: 8px;">{appt['email']}</td></tr>
+                    <tr style="background: #eee;"><td style="padding: 8px; font-weight: bold;">Address:</td><td style="padding: 8px;">{appt['address']}, {appt['city']}, CA</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">County:</td><td style="padding: 8px;">{appt.get('county', '')}</td></tr>
+                    <tr style="background: #eee;"><td style="padding: 8px; font-weight: bold;">Region:</td><td style="padding: 8px;">{appt.get('region', '')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Vehicle:</td><td style="padding: 8px;">{appt['vehicle_year']} {appt['vehicle_make']} {appt['vehicle_model']}</td></tr>
+                    <tr style="background: #eee;"><td style="padding: 8px; font-weight: bold;">Preferred Date:</td><td style="padding: 8px;">{display_date}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Preferred Time:</td><td style="padding: 8px;">{appt['preferred_time']}</td></tr>
+                </table>
+                <p style="font-weight: bold; color: #c0392b;">Please confirm this appointment via Microsoft Bookings.</p>
+            </div>
+        </div>
+        """
+        if send_email(qvv_email, f"New VIN Verification Lead — {appt['full_name']} in {appt['city']}", html, cc=EKHO_CC):
+            notified = True
+
+    qvv_phone = get_secret("QVV_LEADS_PHONE")
+    if qvv_phone:
+        msg = (
+            f"New VIN Verification Lead (Ekho)\n\n"
+            f"Customer: {appt['full_name']}\n"
+            f"Phone: {appt['phone']}\n"
+            f"Email: {appt['email']}\n"
+            f"Address: {appt['address']}, {appt['city']}, CA\n"
+            f"Vehicle: {appt['vehicle_year']} {appt['vehicle_make']} {appt['vehicle_model']}\n"
+            f"Date: {display_date}\n"
+            f"Time: {appt['preferred_time']}\n\n"
+            f"Please confirm via Microsoft Bookings."
         )
-        return resp.status_code in (200, 202)
-    except Exception as e:
-        st.error(f"Teams webhook failed: {e}")
-        return False
+        if send_sms(qvv_phone, msg):
+            notified = True
+
+    return notified
 
 
 def send_customer_confirmation_email(appt):
@@ -625,7 +621,7 @@ def send_partner_notification_email(appt, partner_email):
         </div>
     </div>
     """
-    return send_email(partner_email, f"New VIN Verification Lead — {appt['full_name']} in {appt['city']}", html)
+    return send_email(partner_email, f"New VIN Verification Lead — {appt['full_name']} in {appt['city']}", html, cc=EKHO_CC)
 
 
 def send_partner_notification_sms(appt, partner_phone):
@@ -849,8 +845,9 @@ def page_customer_form():
             notification_updates = {}
 
             if territory["route_method"] == "bookings":
-                # QVV territory — notify team via Teams webhook
-                if send_teams_webhook(appt):
+                # QVV territory — email + SMS to the QVV team
+                # (teams_notified is the legacy column name; tracks QVV notification)
+                if notify_qvv_team(appt):
                     notification_updates["teams_notified"] = True
             else:
                 # Partner territory — send email + SMS to partner
@@ -948,7 +945,7 @@ def admin_tab_leads(db):
     with col1:
         status_filter = st.selectbox("Status", ["All", "pending", "confirmed", "completed", "cancelled"])
     with col2:
-        territory_filter = st.selectbox("Territory", ["All", "qvv", "henry", "michael", "joy"])
+        territory_filter = st.selectbox("Territory", ["All", "qvv", "henry", "joy"])
     with col3:
         date_col1, date_col2 = st.columns(2)
         with date_col1:
@@ -1228,7 +1225,7 @@ def admin_tab_partners(db):
         np_name = st.text_input("Name")
         np_email = st.text_input("Email")
         np_phone = st.text_input("Phone")
-        np_tkey = st.text_input("Territory Key (e.g., henry, michael, joy)")
+        np_tkey = st.text_input("Territory Key (e.g., henry, joy)")
         np_tlabel = st.text_input("Territory Label (e.g., Henry — LA / South LA)")
         np_cities = st.text_area("Cities (comma-separated)")
         add_submitted = st.form_submit_button("Add Partner")
