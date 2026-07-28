@@ -22,7 +22,7 @@ Streamlit web app for scheduling VIN verification appointments across Southern C
 ### Notifications
 
 - **Customer** receives a confirmation email + SMS immediately after booking
-- **QVV leads** send email + SMS to the QVV team (`QVV_LEADS_EMAIL` / `QVV_LEADS_PHONE`)
+- **QVV leads** create a Zoho Desk ticket via API (contact = the customer) + SMS to the QVV team; the lead email goes to `QVV_LEADS_EMAIL` if set, otherwise directly to Ekho
 - **Partner leads** send email + SMS to the assigned partner verifier
 - **Ekho** (`support@ekho.com`) is CC'd on every lead notification email (constant `EKHO_CC` in `app.py`)
 - **Email From:** Quick VIN Verification (via SendGrid, `SENDGRID_FROM_EMAIL`)
@@ -95,8 +95,11 @@ cp secrets.toml.template .streamlit/secrets.toml
 | `RC_CLIENT_SECRET` | RingCentral app Client Secret |
 | `RC_JWT` | RingCentral JWT credential |
 | `RC_FROM_NUMBER` | RingCentral phone number (with +1) |
-| `QVV_LEADS_EMAIL` | QVV team email for QVV-territory lead notifications (optional) |
+| `QVV_LEADS_EMAIL` | QVV team email for QVV-territory lead notifications (optional; if blank, lead email goes straight to Ekho) |
 | `QVV_LEADS_PHONE` | QVV team phone for QVV-territory lead SMS (optional) |
+| `ZOHO_CLIENT_ID` | Zoho OAuth client ID (for Desk ticket creation, optional) |
+| `ZOHO_CLIENT_SECRET` | Zoho OAuth client secret |
+| `ZOHO_REFRESH_TOKEN_DESK` | Zoho Desk refresh token — QVV leads create Desk tickets when set |
 | `PARTNER_HENRY_EMAIL` | Henry's email for lead notifications |
 | `PARTNER_HENRY_PHONE` | Henry's phone for SMS notifications |
 | `PARTNER_JOY_EMAIL` | Joy's email for lead notifications |
@@ -143,3 +146,4 @@ streamlit run app.py
 | 2026-03-08 | Section headers styled bold blue, reduced white space between form sections |
 | 2026-07-28 | Removed Teams webhook — QVV leads now email + SMS via `QVV_LEADS_EMAIL`/`QVV_LEADS_PHONE`. San Fernando Valley reassigned from Michael to Henry Alvarez (Michael no longer a partner). Ekho (support@ekho.com) CC'd on all lead emails. Redeployed at qvv-scheduler.streamlit.app |
 | 2026-07-28 | Email switched from Zoho SMTP to SendGrid API — From address now configurable via `SENDGRID_FROM_EMAIL` (leads@quickautotags.com after domain auth) |
+| 2026-07-28 | QVV leads now create Zoho Desk tickets directly via API (Standard dept, contact = customer) — email-to-Desk intake was getting spam-filtered. Ekho gets the lead email directly when `QVV_LEADS_EMAIL` is unset |

@@ -499,19 +499,90 @@ def send_sms(to_number, message_text):
         return False
 
 
+def create_desk_ticket(appt):
+    """
+    Create a Zoho Desk ticket for a QVV-territory lead via the Desk REST API.
+    The ticket contact is the customer, so the team can reply directly.
+    Needs ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET / ZOHO_REFRESH_TOKEN_DESK secrets.
+    Returns True on success.
+    """
+    if not require_secrets("ZOHO_CLIENT_ID", "ZOHO_CLIENT_SECRET", "ZOHO_REFRESH_TOKEN_DESK"):
+        return False
+    try:
+        tok = requests.post(
+            "https://accounts.zoho.com/oauth/v2/token",
+            data={
+                "refresh_token": st.secrets["ZOHO_REFRESH_TOKEN_DESK"],
+                "client_id": st.secrets["ZOHO_CLIENT_ID"],
+                "client_secret": st.secrets["ZOHO_CLIENT_SECRET"],
+                "grant_type": "refresh_token",
+            },
+            timeout=15,
+        ).json()
+        access = tok.get("access_token")
+        if not access:
+            st.error(f"Desk auth failed: {tok.get('error', 'no access token')}")
+            return False
+
+        display_date = format_date_display(appt.get("preferred_date", ""))
+        description = (
+            f"<b>New VIN Verification Lead (Ekho)</b><br><br>"
+            f"<b>Customer:</b> {appt['full_name']}<br>"
+            f"<b>Phone:</b> {appt['phone']}<br>"
+            f"<b>Email:</b> {appt['email']}<br>"
+            f"<b>Address:</b> {appt['address']}, {appt['city']}, CA<br>"
+            f"<b>County:</b> {appt.get('county', '')}<br>"
+            f"<b>Region:</b> {appt.get('region', '')}<br>"
+            f"<b>Vehicle:</b> {appt['vehicle_year']} {appt['vehicle_make']} {appt['vehicle_model']}<br>"
+            f"<b>Preferred Date:</b> {display_date}<br>"
+            f"<b>Preferred Time:</b> {appt['preferred_time']}<br><br>"
+            f"<b>Please confirm this appointment via Microsoft Bookings.</b>"
+        )
+        payload = {
+            "subject": f"New VIN Verification Lead — {appt['full_name']} in {appt['city']}",
+            "departmentId": "561223000000006907",  # Standard department
+            "channel": "Web",
+            "contact": {
+                "lastName": appt["full_name"],
+                "email": appt["email"],
+                "phone": appt["phone"],
+            },
+            "description": description,
+        }
+        resp = requests.post(
+            "https://desk.zoho.com/api/v1/tickets",
+            json=payload,
+            headers={"Authorization": f"Zoho-oauthtoken {access}", "orgId": "732767718"},
+            timeout=15,
+        )
+        if resp.status_code in (200, 201):
+            return True
+        st.error(f"Desk ticket failed: {resp.status_code} {resp.text[:200]}")
+        return False
+    except Exception as e:
+        st.error(f"Desk ticket failed: {e}")
+        return False
+
+
 def notify_qvv_team(appt):
     """
-    Notify the QVV team of a new lead in their territory by email + SMS.
-    Destinations come from the QVV_LEADS_EMAIL / QVV_LEADS_PHONE secrets.
-    Either may be unset — that channel is skipped silently so the customer
-    never sees an error; the lead is still saved and visible in the admin panel.
+    Notify the QVV team of a new lead in their territory:
+    1. Zoho Desk ticket via API (if Zoho secrets configured) — primary intake
+    2. Lead email — to QVV_LEADS_EMAIL if set (CC Ekho), else straight to Ekho
+       so Ekho always gets a copy
+    3. SMS to QVV_LEADS_PHONE if set
+    Each channel is independent; the lead is always saved to the admin panel.
     Returns True if at least one notification went out.
     """
     display_date = format_date_display(appt.get("preferred_date", ""))
     notified = False
 
+    if get_secret("ZOHO_REFRESH_TOKEN_DESK"):
+        if create_desk_ticket(appt):
+            notified = True
+
     qvv_email = get_secret("QVV_LEADS_EMAIL")
-    if qvv_email:
+    if qvv_email or EKHO_CC:
         html = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background: #1a5632; padding: 20px; text-align: center;">
@@ -533,7 +604,13 @@ def notify_qvv_team(appt):
             </div>
         </div>
         """
-        if send_email(qvv_email, f"New VIN Verification Lead — {appt['full_name']} in {appt['city']}", html, cc=EKHO_CC):
+        subject = f"New VIN Verification Lead — {appt['full_name']} in {appt['city']}"
+        if qvv_email:
+            sent = send_email(qvv_email, subject, html, cc=EKHO_CC)
+        else:
+            # No QVV inbox configured — Ekho still gets its copy directly
+            sent = send_email(EKHO_CC, subject, html)
+        if sent:
             notified = True
 
     qvv_phone = get_secret("QVV_LEADS_PHONE")
