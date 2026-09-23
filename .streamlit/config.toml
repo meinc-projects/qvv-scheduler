@@ -1,0 +1,18 @@
+# Streamlit server config for the self-hosted VPS deployment (NSSM service QVVScheduler).
+# Public: schedule.vinverifications.com (+ schedule.quickautotags.com alias). Cloudflare Tunnel terminates TLS and forwards to http://localhost:8300.
+[server]
+port = 8300
+address = "127.0.0.1"
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+fileWatcherType = "none"
+runOnSave = false
+
+[browser]
+gatherUsageStats = false
+serverAddress = "schedule.vinverifications.com"
+serverPort = 443
+
+[theme]
+base = "light"

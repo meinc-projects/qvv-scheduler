@@ -194,139 +194,208 @@ st.markdown(f"""
 
 # ===========================================================================
 # TERRITORY CONFIGURATION
-# Each city maps to a territory with county, region, and routing info.
+# Coverage is by COUNTY. Every incorporated city in the five service counties
+# is listed, plus the unincorporated communities and LA / San Diego
+# neighborhoods that customers commonly type as their "city".
+#
+#   Riverside / San Bernardino / Orange County  -> QVV (in-house, confirm via Bookings)
+#   Los Angeles County                          -> Henry (partner)
+#   San Diego County                            -> Joy (partner)
+#
+# PRIMARY routing is by ADDRESS: the customer types street / city / ZIP as free
+# text and resolve_territory() geocodes it (US Census Geocoder, then Nominatim)
+# to get the COUNTY, which decides the partner. This city table is the fallback
+# when geocoding fails, and it supplies the finer `region` tag used by the
+# dispatch-map conflict warnings. Anything unresolvable is tagged `unassigned`
+# and sent to the QVV team for manual routing, so no lead is ever lost.
 # V2 will pull this from the Supabase partners table cities_csv field.
 # ===========================================================================
 
-# Helper to build city entries quickly
-def _qvv(city, county, region):
-    """Create a QVV territory entry (QVV team notified by email/SMS, confirms via Bookings)."""
-    return {
-        "territory_key": "qvv",
-        "territory_label": "Quick VIN Verification",
-        "route_method": "bookings",
-        "county": county,
-        "region": region,
-    }
+CITY_TERRITORIES = {}
 
-def _partner(city, key, label, county, region):
-    """Create a partner territory entry (routes via email + SMS to partner)."""
-    return {
-        "territory_key": key,
-        "territory_label": label,
-        "route_method": "notify",
-        "county": county,
-        "region": region,
-    }
 
-# Master city-to-territory mapping — sorted alphabetically in the dropdown
-CITY_TERRITORIES = {
-    # --- QVV: San Bernardino County (inland) ---
-    "San Bernardino":     _qvv("San Bernardino", "San Bernardino County", "inland"),
-    "Ontario":            _qvv("Ontario", "San Bernardino County", "inland"),
-    "Rancho Cucamonga":   _qvv("Rancho Cucamonga", "San Bernardino County", "inland"),
-    "Fontana":            _qvv("Fontana", "San Bernardino County", "inland"),
-    "Redlands":           _qvv("Redlands", "San Bernardino County", "inland"),
-    "Upland":             _qvv("Upland", "San Bernardino County", "inland"),
-    "Rialto":             _qvv("Rialto", "San Bernardino County", "inland"),
-    "Yucaipa":            _qvv("Yucaipa", "San Bernardino County", "inland"),
-    "Highland":           _qvv("Highland", "San Bernardino County", "inland"),
-    # --- QVV: San Bernardino County (high desert) ---
-    "Victorville":        _qvv("Victorville", "San Bernardino County", "high_desert"),
-    "Hesperia":           _qvv("Hesperia", "San Bernardino County", "high_desert"),
-    "Apple Valley":       _qvv("Apple Valley", "San Bernardino County", "high_desert"),
-    "Barstow":            _qvv("Barstow", "San Bernardino County", "high_desert"),
-    # --- QVV: San Bernardino County (mountain) ---
-    "Big Bear":           _qvv("Big Bear", "San Bernardino County", "mountain"),
-    # --- QVV: San Bernardino County (desert) ---
-    "Twentynine Palms":   _qvv("Twentynine Palms", "San Bernardino County", "desert"),
-    "Joshua Tree":        _qvv("Joshua Tree", "San Bernardino County", "desert"),
-    # --- QVV: Riverside County (inland) ---
-    "Riverside":          _qvv("Riverside", "Riverside County", "inland"),
-    "Corona":             _qvv("Corona", "Riverside County", "inland"),
-    "Moreno Valley":      _qvv("Moreno Valley", "Riverside County", "inland"),
-    "Hemet":              _qvv("Hemet", "Riverside County", "inland"),
-    "Perris":             _qvv("Perris", "Riverside County", "inland"),
-    # --- QVV: Riverside County (southwest) ---
-    "Temecula":           _qvv("Temecula", "Riverside County", "southwest"),
-    "Murrieta":           _qvv("Murrieta", "Riverside County", "southwest"),
-    "Menifee":            _qvv("Menifee", "Riverside County", "southwest"),
-    "Lake Elsinore":      _qvv("Lake Elsinore", "Riverside County", "southwest"),
-    # --- QVV: Riverside County (pass) ---
-    "Beaumont":           _qvv("Beaumont", "Riverside County", "pass"),
-    "Banning":            _qvv("Banning", "Riverside County", "pass"),
-    # --- QVV: Riverside County (desert) ---
-    "Palm Springs":       _qvv("Palm Springs", "Riverside County", "desert"),
-    "Palm Desert":        _qvv("Palm Desert", "Riverside County", "desert"),
-    "Indio":              _qvv("Indio", "Riverside County", "desert"),
-    "Cathedral City":     _qvv("Cathedral City", "Riverside County", "desert"),
-    "La Quinta":          _qvv("La Quinta", "Riverside County", "desert"),
-    "Desert Hot Springs": _qvv("Desert Hot Springs", "Riverside County", "desert"),
-    "Coachella":          _qvv("Coachella", "Riverside County", "desert"),
-    # --- QVV: Orange County ---
-    "Anaheim":            _qvv("Anaheim", "Orange County", "orange_county"),
-    "Santa Ana":          _qvv("Santa Ana", "Orange County", "orange_county"),
-    "Irvine":             _qvv("Irvine", "Orange County", "orange_county"),
-    "Huntington Beach":   _qvv("Huntington Beach", "Orange County", "orange_county"),
-    "Garden Grove":       _qvv("Garden Grove", "Orange County", "orange_county"),
-    "Orange":             _qvv("Orange", "Orange County", "orange_county"),
-    "Fullerton":          _qvv("Fullerton", "Orange County", "orange_county"),
-    "Costa Mesa":         _qvv("Costa Mesa", "Orange County", "orange_county"),
-    "Mission Viejo":      _qvv("Mission Viejo", "Orange County", "orange_county"),
-    "Lake Forest":        _qvv("Lake Forest", "Orange County", "orange_county"),
-    "Buena Park":         _qvv("Buena Park", "Orange County", "orange_county"),
-    "Yorba Linda":        _qvv("Yorba Linda", "Orange County", "orange_county"),
-    "San Clemente":       _qvv("San Clemente", "Orange County", "orange_county"),
-    "Laguna Niguel":      _qvv("Laguna Niguel", "Orange County", "orange_county"),
-    # --- Partner: Henry (LA / South LA) ---
-    "Los Angeles":        _partner("Los Angeles", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    "Long Beach":         _partner("Long Beach", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    "Inglewood":          _partner("Inglewood", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    "Compton":            _partner("Compton", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    "Torrance":           _partner("Torrance", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    "Carson":             _partner("Carson", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    "Hawthorne":          _partner("Hawthorne", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    "Downey":             _partner("Downey", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    "Norwalk":            _partner("Norwalk", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    "Whittier":           _partner("Whittier", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    "South Gate":         _partner("South Gate", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    "Lynwood":            _partner("Lynwood", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    "Paramount":          _partner("Paramount", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    "Bellflower":         _partner("Bellflower", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    "Lakewood":           _partner("Lakewood", "henry", "Henry — LA / South LA", "Los Angeles County", "la_south"),
-    # --- Partner: Henry (San Fernando Valley — took over from Michael, 2026-07) ---
-    "North Hollywood":    _partner("North Hollywood", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Van Nuys":           _partner("Van Nuys", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Burbank":            _partner("Burbank", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Glendale":           _partner("Glendale", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Pasadena":           _partner("Pasadena", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Sherman Oaks":       _partner("Sherman Oaks", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Encino":             _partner("Encino", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Woodland Hills":     _partner("Woodland Hills", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Canoga Park":        _partner("Canoga Park", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Reseda":             _partner("Reseda", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Northridge":         _partner("Northridge", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Panorama City":      _partner("Panorama City", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Sun Valley":         _partner("Sun Valley", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Sylmar":             _partner("Sylmar", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    "Tarzana":            _partner("Tarzana", "henry", "Henry — San Fernando Valley", "Los Angeles County", "sfv"),
-    # --- Partner: Joy (San Diego County) ---
-    "San Diego":          _partner("San Diego", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
-    "Chula Vista":        _partner("Chula Vista", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
-    "Oceanside":          _partner("Oceanside", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
-    "Escondido":          _partner("Escondido", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
-    "Carlsbad":           _partner("Carlsbad", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
-    "El Cajon":           _partner("El Cajon", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
-    "Vista":              _partner("Vista", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
-    "San Marcos":         _partner("San Marcos", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
-    "Encinitas":          _partner("Encinitas", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
-    "National City":      _partner("National City", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
-    "La Mesa":            _partner("La Mesa", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
-    "Santee":             _partner("Santee", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
-    "Poway":              _partner("Poway", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
-    "Imperial Beach":     _partner("Imperial Beach", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
-    "Coronado":           _partner("Coronado", "joy", "Joy — San Diego County", "San Diego County", "san_diego"),
+def _add(cities, territory_key, territory_label, route_method, county, region):
+    """Register a group of cities under one territory/county/region."""
+    for city in cities:
+        CITY_TERRITORIES[city] = {
+            "territory_key": territory_key,
+            "territory_label": territory_label,
+            "route_method": route_method,
+            "county": county,
+            "region": region,
+        }
+
+
+def _qvv(cities, county, region):
+    _add(cities, "qvv", "Quick VIN Verification", "bookings", county, region)
+
+
+def _henry(cities, label, region):
+    _add(cities, "henry", label, "notify", "Los Angeles County", region)
+
+
+def _joy(cities, region):
+    _add(cities, "joy", "Joy — San Diego County", "notify", "San Diego County", region)
+
+
+# --- QVV: San Bernardino County -------------------------------------------
+_qvv([
+    "San Bernardino", "Ontario", "Rancho Cucamonga", "Fontana", "Redlands", "Upland",
+    "Rialto", "Yucaipa", "Highland", "Chino", "Chino Hills", "Colton", "Grand Terrace",
+    "Loma Linda", "Montclair", "Bloomington", "Muscoy", "Mentone", "Lytle Creek",
+    "Devore", "Mt. Baldy", "San Antonio Heights",
+], "San Bernardino County", "inland")
+_qvv([
+    "Victorville", "Hesperia", "Apple Valley", "Adelanto", "Barstow", "Phelan",
+    "Pinon Hills", "Oak Hills", "Wrightwood", "Lucerne Valley", "Helendale",
+    "Silver Lakes", "Oro Grande", "Spring Valley Lake", "Newberry Springs", "Yermo",
+    "Daggett", "Hinkley", "Fort Irwin", "Baker", "Ludlow", "Trona", "Needles", "Big River",
+], "San Bernardino County", "high_desert")
+_qvv([
+    "Big Bear Lake", "Big Bear", "Big Bear City", "Sugarloaf", "Fawnskin", "Lake Arrowhead",
+    "Crestline", "Running Springs", "Blue Jay", "Twin Peaks", "Cedar Glen",
+    "Green Valley Lake", "Forest Falls", "Angelus Oaks",
+], "San Bernardino County", "mountain")
+_qvv([
+    "Twentynine Palms", "Joshua Tree", "Yucca Valley", "Landers", "Morongo Valley",
+    "Pioneertown", "Wonder Valley",
+], "San Bernardino County", "desert")
+
+# --- QVV: Riverside County ------------------------------------------------
+_qvv([
+    "Riverside", "Corona", "Moreno Valley", "Hemet", "Perris", "Jurupa Valley", "Eastvale",
+    "Norco", "San Jacinto", "Mira Loma", "Rubidoux", "Pedley", "Glen Avon", "Sunnyslope",
+    "Woodcrest", "Mead Valley", "Good Hope", "Highgrove", "March Air Reserve Base",
+    "Nuevo", "Romoland", "Homeland", "Winchester", "East Hemet", "Valle Vista",
+    "Home Gardens", "El Cerrito", "Coronita", "Temescal Valley", "Lake Mathews",
+    "Green Acres",
+], "Riverside County", "inland")
+_qvv([
+    "Temecula", "Murrieta", "Menifee", "Lake Elsinore", "Wildomar", "Canyon Lake",
+    "Sun City", "Quail Valley", "Lakeland Village", "French Valley",
+    "Murrieta Hot Springs", "Anza", "Aguanga", "Sage",
+], "Riverside County", "southwest")
+_qvv([
+    "Beaumont", "Banning", "Calimesa", "Cherry Valley", "Cabazon", "Idyllwild",
+    "Pine Cove", "Mountain Center",
+], "Riverside County", "pass")
+_qvv([
+    "Palm Springs", "Palm Desert", "Indio", "Cathedral City", "La Quinta",
+    "Desert Hot Springs", "Coachella", "Rancho Mirage", "Indian Wells", "Thousand Palms",
+    "Bermuda Dunes", "Thermal", "Mecca", "Oasis", "North Shore", "Whitewater",
+    "Sky Valley", "Blythe", "Ripley", "Desert Center",
+], "Riverside County", "desert")
+
+# --- QVV: Orange County ----------------------------------------------------
+_qvv([
+    "Aliso Viejo", "Anaheim", "Anaheim Hills", "Brea", "Buena Park", "Capistrano Beach",
+    "Corona del Mar", "Costa Mesa", "Coto de Caza", "Cypress", "Dana Point",
+    "Foothill Ranch", "Fountain Valley", "Fullerton", "Garden Grove", "Huntington Beach",
+    "Irvine", "La Habra", "La Palma", "Ladera Ranch", "Laguna Beach", "Laguna Hills",
+    "Laguna Niguel", "Laguna Woods", "Lake Forest", "Las Flores", "Los Alamitos",
+    "Midway City", "Mission Viejo", "Newport Beach", "Newport Coast", "North Tustin",
+    "Orange", "Placentia", "Rancho Mission Viejo", "Rancho Santa Margarita", "Rossmoor",
+    "San Clemente", "San Juan Capistrano", "Santa Ana", "Seal Beach", "Silverado",
+    "Stanton", "Sunset Beach", "Trabuco Canyon", "Tustin", "Villa Park", "Westminster",
+    "Yorba Linda",
+], "Orange County", "orange_county")
+
+# --- Partner: Henry — Los Angeles County ------------------------------------
+_henry([
+    # City of LA (central / Westside / Harbor) + South Bay + Gateway cities
+    "Los Angeles", "Downtown Los Angeles", "Hollywood", "West Hollywood", "Koreatown",
+    "Silver Lake", "Echo Park", "Los Feliz", "Eagle Rock", "Highland Park",
+    "Boyle Heights", "East Los Angeles", "Watts", "Willowbrook", "Florence-Graham",
+    "Walnut Park", "West Los Angeles", "Century City", "Brentwood", "Pacific Palisades",
+    "Venice", "Mar Vista", "Playa del Rey", "Playa Vista", "Westchester", "Marina del Rey",
+    "Culver City", "Santa Monica", "Beverly Hills", "Ladera Heights", "View Park",
+    "Malibu", "Topanga",
+    "San Pedro", "Wilmington", "Harbor City", "Long Beach", "Signal Hill",
+    "Inglewood", "Lennox", "Del Aire", "Hawthorne", "Gardena", "Lawndale",
+    "Alondra Park", "El Segundo", "Manhattan Beach", "Hermosa Beach", "Redondo Beach",
+    "Torrance", "West Carson", "Lomita", "Carson", "Rancho Dominguez",
+    "East Rancho Dominguez", "Palos Verdes Estates", "Rancho Palos Verdes",
+    "Rolling Hills", "Rolling Hills Estates", "Compton", "Athens", "Lynwood",
+    "South Gate", "Huntington Park", "Bell", "Bell Gardens", "Cudahy", "Maywood",
+    "Vernon", "Commerce", "Downey", "Norwalk", "Paramount", "Bellflower", "Lakewood",
+    "Cerritos", "Artesia", "Hawaiian Gardens", "La Mirada", "Santa Fe Springs",
+    "Pico Rivera", "Montebello", "Whittier", "South Whittier", "West Whittier",
+    "La Habra Heights", "Avalon",
+], "Henry — LA / South Bay / Westside", "la_south")
+_henry([
+    "North Hollywood", "Van Nuys", "Burbank", "Glendale", "Sherman Oaks", "Encino",
+    "Woodland Hills", "Canoga Park", "Reseda", "Northridge", "Panorama City",
+    "Sun Valley", "Sylmar", "Tarzana", "Studio City", "Valley Village", "Toluca Lake",
+    "Universal City", "Chatsworth", "Granada Hills", "Porter Ranch", "Winnetka",
+    "West Hills", "Mission Hills", "Pacoima", "Arleta", "Lake Balboa", "Sunland",
+    "Tujunga", "San Fernando", "La Crescenta", "Montrose", "La Cañada Flintridge",
+    "Calabasas", "Hidden Hills", "Agoura Hills", "Westlake Village",
+], "Henry — San Fernando Valley", "sfv")
+_henry([
+    "Pasadena", "South Pasadena", "Altadena", "East Pasadena", "San Marino", "Alhambra",
+    "Arcadia", "Monrovia", "Bradbury", "Duarte", "Sierra Madre", "Temple City",
+    "San Gabriel", "South San Gabriel", "Rosemead", "Monterey Park", "El Monte",
+    "South El Monte", "North El Monte", "Baldwin Park", "Irwindale", "Azusa", "Citrus",
+    "Glendora", "Charter Oak", "Covina", "West Covina", "San Dimas", "La Verne",
+    "Claremont", "Pomona", "Diamond Bar", "Walnut", "City of Industry",
+    "La Puente", "West Puente Valley", "Valinda", "Avocado Heights", "Hacienda Heights",
+    "Rowland Heights", "Mayflower Village",
+], "Henry — San Gabriel Valley", "la_sgv")
+_henry([
+    "Santa Clarita", "Valencia", "Newhall", "Saugus", "Canyon Country", "Stevenson Ranch",
+    "Castaic", "Acton", "Agua Dulce", "Palmdale", "Lancaster", "Quartz Hill",
+    "Lake Los Angeles", "Littlerock", "Sun Village",
+], "Henry — Santa Clarita / Antelope Valley", "la_north")
+
+# --- Partner: Joy — San Diego County ----------------------------------------
+_joy([
+    "San Diego", "Downtown San Diego", "La Jolla", "Pacific Beach", "Ocean Beach",
+    "Point Loma", "Mission Valley", "Hillcrest", "North Park", "Clairemont",
+    "Kearny Mesa", "Linda Vista", "Serra Mesa", "Tierrasanta", "University City",
+    "Sorrento Valley", "Torrey Pines", "Carmel Valley", "Del Mar Heights", "Mira Mesa",
+    "Scripps Ranch", "Rancho Penasquitos", "Rancho Bernardo", "Carmel Mountain Ranch",
+    "Sabre Springs", "Black Mountain Ranch", "4S Ranch", "Del Cerro", "College Area",
+    "Logan Heights", "Barrio Logan", "Encanto", "Paradise Hills", "Otay Mesa",
+    "San Ysidro", "Chula Vista", "National City", "Bonita", "Lincoln Acres",
+    "Imperial Beach", "Coronado", "Lemon Grove", "Spring Valley", "La Mesa",
+    "Casa de Oro", "Mount Helix", "Rancho San Diego",
+], "san_diego")
+_joy([
+    "Oceanside", "Camp Pendleton", "Carlsbad", "Encinitas", "Cardiff", "Solana Beach",
+    "Del Mar", "Rancho Santa Fe", "Escondido", "Hidden Meadows", "San Marcos", "Vista",
+    "Bonsall", "Fallbrook", "Rainbow", "Valley Center", "Pauma Valley", "Poway",
+    "Ramona", "Palomar Mountain", "Warner Springs",
+], "sd_north")
+_joy([
+    "El Cajon", "Santee", "Lakeside", "Winter Gardens", "Eucalyptus Hills", "Alpine",
+    "Crest", "Harbison Canyon", "Jamul", "Dulzura", "Descanso", "Pine Valley", "Julian",
+    "Campo", "Potrero", "Boulevard", "Jacumba", "Borrego Springs",
+], "sd_east")
+
+# County -> territory. The partner is decided by county; `region` here is the
+# default when the city is not in CITY_TERRITORIES.
+COUNTY_TERRITORIES = {
+    "Riverside County":       {"territory_key": "qvv",   "territory_label": "Quick VIN Verification",       "route_method": "bookings", "region": "inland"},
+    "San Bernardino County":  {"territory_key": "qvv",   "territory_label": "Quick VIN Verification",       "route_method": "bookings", "region": "inland"},
+    "Orange County":          {"territory_key": "qvv",   "territory_label": "Quick VIN Verification",       "route_method": "bookings", "region": "orange_county"},
+    "Los Angeles County":     {"territory_key": "henry", "territory_label": "Henry — Los Angeles County",   "route_method": "notify",   "region": "la_south"},
+    "San Diego County":       {"territory_key": "joy",   "territory_label": "Joy — San Diego County",       "route_method": "notify",   "region": "san_diego"},
 }
+
+
+def _unassigned(county=None):
+    """Territory record for a lead nobody is mapped to — goes to QVV for manual routing."""
+    if county:
+        label = f"Unassigned — {county} is outside the service area (route manually)"
+    else:
+        label = "Unassigned — address could not be located (route manually)"
+    return {
+        "territory_key": "unassigned",
+        "territory_label": label,
+        "route_method": "bookings",   # handled by notify_qvv_team like a QVV lead
+        "county": county or "Unknown",
+        "region": "unknown",
+    }
 
 # Sorted city list for the dropdown
 ALL_CITIES = sorted(CITY_TERRITORIES.keys())
@@ -397,24 +466,105 @@ def get_supabase():
 
 
 # ===========================================================================
-# GEOCODING — free Nominatim via geopy, with simple caching
+# GEOCODING + TERRITORY RESOLUTION
+# Free, keyless services: US Census Geocoder (authoritative county for any US
+# street address) with OpenStreetMap Nominatim as the fallback. Results are
+# cached 24 h. Everything here is best-effort: a geocoder outage never blocks a
+# booking — the lead simply falls back to the city table or to `unassigned`.
 # ===========================================================================
-@st.cache_data(ttl=86400)  # Cache geocoding results for 24 hours
-def geocode_address(address, city):
-    """
-    Convert an address + city to lat/lon using OpenStreetMap Nominatim.
-    Returns (latitude, longitude) or (None, None) on failure.
-    """
+def _geocode_census(full_address):
+    """US Census Geocoder -> (county, city, lat, lon) or None."""
+    try:
+        r = requests.get(
+            "https://geocoding.geo.census.gov/geocoder/geographies/onelineaddress",
+            params={
+                "address": full_address,
+                "benchmark": "Public_AR_Current",
+                "vintage": "Current_Current",
+                "format": "json",
+            },
+            timeout=8,
+        ).json()
+        matches = r.get("result", {}).get("addressMatches") or []
+        if not matches:
+            return None
+        m = matches[0]
+        counties = m.get("geographies", {}).get("Counties") or []
+        county = counties[0].get("NAME") if counties else None
+        city = (m.get("addressComponents") or {}).get("city") or ""
+        coords = m.get("coordinates") or {}
+        return county, city.title(), coords.get("y"), coords.get("x")
+    except Exception:
+        return None
+
+
+def _geocode_nominatim(full_address):
+    """OpenStreetMap Nominatim -> (county, city, lat, lon) or None."""
     try:
         from geopy.geocoders import Nominatim
         geolocator = Nominatim(user_agent="qvv-scheduler-app")
-        full_address = f"{address}, {city}, CA"
-        location = geolocator.geocode(full_address, timeout=10)
-        if location:
-            return location.latitude, location.longitude
+        loc = geolocator.geocode(full_address, addressdetails=True, timeout=8)
+        if not loc:
+            return None
+        ad = loc.raw.get("address") or {}
+        county = ad.get("county")
+        city = ad.get("city") or ad.get("town") or ad.get("village") or ad.get("hamlet") or ""
+        return county, city, loc.latitude, loc.longitude
     except Exception:
-        pass  # Geocoding is best-effort; don't block the submission
-    return None, None
+        return None
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def resolve_territory(address, city, zip_code):
+    """
+    Turn a free-text address into a routing decision.
+    Returns a dict: territory_key, territory_label, route_method, county, region,
+    latitude, longitude, matched_city, resolved_by.
+      resolved_by = "census" | "nominatim" | "city_table" | "none"
+    """
+    parts = [address.strip(), city.strip(), "CA"]
+    if zip_code and zip_code.strip():
+        parts.append(zip_code.strip())
+    full_address = ", ".join(p for p in parts if p)
+
+    county = matched_city = None
+    lat = lon = None
+    resolved_by = "none"
+    for name, fn in (("census", _geocode_census), ("nominatim", _geocode_nominatim)):
+        hit = fn(full_address)
+        if hit and hit[0]:
+            county, matched_city, lat, lon = hit
+            resolved_by = name
+            break
+        if hit and lat is None:
+            # No county but we did get coordinates — keep them for the map
+            _, _, lat, lon = hit
+
+    # Region (and a finer label) from the city table when the city is known
+    city_hit = CITY_TERRITORIES.get(matched_city) or CITY_TERRITORIES.get(city.strip().title())
+
+    if county in COUNTY_TERRITORIES:
+        base = dict(COUNTY_TERRITORIES[county])
+        base["county"] = county
+        if city_hit and city_hit["county"] == county:
+            base["region"] = city_hit["region"]
+            base["territory_label"] = city_hit["territory_label"]
+        territory = base
+    elif county:
+        territory = _unassigned(county)             # e.g. Ventura County — out of area
+    elif city_hit:
+        territory = dict(city_hit)                  # geocoders failed; trust the typed city
+        resolved_by = "city_table"
+    else:
+        territory = _unassigned()
+
+    territory.update({
+        "latitude": lat,
+        "longitude": lon,
+        "matched_city": matched_city or city.strip().title(),
+        "resolved_by": resolved_by,
+    })
+    return territory
 
 
 # ===========================================================================
@@ -525,8 +675,14 @@ def create_desk_ticket(appt):
             return False
 
         display_date = format_date_display(appt.get("preferred_date", ""))
+        routing_note = (
+            "<b style='color:#c0392b'>NEEDS ROUTING: this city is not in the service list. "
+            "Confirm coverage and hand off to the right verifier.</b><br><br>"
+            if appt.get("territory_key") == "unassigned" else ""
+        )
         description = (
             f"<b>New VIN Verification Lead (Ekho)</b><br><br>"
+            f"{routing_note}"
             f"<b>Customer:</b> {appt['full_name']}<br>"
             f"<b>Phone:</b> {appt['phone']}<br>"
             f"<b>Email:</b> {appt['email']}<br>"
@@ -538,8 +694,9 @@ def create_desk_ticket(appt):
             f"<b>Preferred Time:</b> {appt['preferred_time']}<br><br>"
             f"<b>Please confirm this appointment via Microsoft Bookings.</b>"
         )
+        prefix = "[NEEDS ROUTING] " if appt.get("territory_key") == "unassigned" else ""
         payload = {
-            "subject": f"New VIN Verification Lead — {appt['full_name']} in {appt['city']}",
+            "subject": f"{prefix}New VIN Verification Lead — {appt['full_name']} in {appt['city']}",
             "departmentId": "561223000000006907",  # Standard department
             "channel": "Web",
             "contact": {
@@ -576,6 +733,14 @@ def notify_qvv_team(appt):
     """
     display_date = format_date_display(appt.get("preferred_date", ""))
     notified = False
+    unassigned = appt.get("territory_key") == "unassigned"
+    subject_prefix = "[NEEDS ROUTING] " if unassigned else ""
+    routing_html = (
+        '<p style="font-weight: bold; color: #c0392b;">NEEDS ROUTING: this city is not in the '
+        'service list. Confirm coverage and hand off to the right verifier.</p>'
+        if unassigned else ""
+    )
+    routing_sms = "NEEDS ROUTING - city not in service list.\n\n" if unassigned else ""
 
     if get_secret("ZOHO_REFRESH_TOKEN_DESK"):
         if create_desk_ticket(appt):
@@ -589,6 +754,7 @@ def notify_qvv_team(appt):
                 <h1 style="color: white; margin: 0;">New VIN Verification Lead (Ekho)</h1>
             </div>
             <div style="padding: 20px; background: #f9f9f9;">
+                {routing_html}
                 <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
                     <tr><td style="padding: 8px; font-weight: bold;">Customer:</td><td style="padding: 8px;">{appt['full_name']}</td></tr>
                     <tr style="background: #eee;"><td style="padding: 8px; font-weight: bold;">Phone:</td><td style="padding: 8px;">{appt['phone']}</td></tr>
@@ -604,7 +770,7 @@ def notify_qvv_team(appt):
             </div>
         </div>
         """
-        subject = f"New VIN Verification Lead — {appt['full_name']} in {appt['city']}"
+        subject = f"{subject_prefix}New VIN Verification Lead — {appt['full_name']} in {appt['city']}"
         if qvv_email:
             sent = send_email(qvv_email, subject, html, cc=EKHO_CC)
         else:
@@ -617,6 +783,7 @@ def notify_qvv_team(appt):
     if qvv_phone:
         msg = (
             f"New VIN Verification Lead (Ekho)\n\n"
+            f"{routing_sms}"
             f"Customer: {appt['full_name']}\n"
             f"Phone: {appt['phone']}\n"
             f"Email: {appt['email']}\n"
@@ -803,8 +970,12 @@ def page_customer_form():
 
         # Section 2: Location
         st.markdown('<p style="font-size: 18px; font-weight: 700; color: #003594; margin: 0.1rem 0 0.25rem 0;">Appointment Location</p>', unsafe_allow_html=True)
-        address = st.text_input("Street Address *")
-        city = st.selectbox("City *", options=["— Select your city —"] + ALL_CITIES, index=0)
+        address = st.text_input("Street Address *", placeholder="e.g. 3900 Main St")
+        colc, colz = st.columns([2, 1])
+        with colc:
+            city = st.text_input("City *", placeholder="e.g. Riverside")
+        with colz:
+            zip_code = st.text_input("ZIP Code", placeholder="92501")
 
         st.divider()
 
@@ -868,8 +1039,11 @@ def page_customer_form():
             errors.append("Phone Number is required.")
         if not address.strip():
             errors.append("Street Address is required.")
-        if not city or city == "— Select your city —":
+        if not city.strip():
             errors.append("City is required.")
+        zip_digits = "".join(c for c in zip_code if c.isdigit())
+        if zip_code.strip() and len(zip_digits) != 5:
+            errors.append("ZIP Code must be 5 digits (or leave it blank).")
         if not vehicle_year or vehicle_year == "— Year —":
             errors.append("Vehicle Year is required.")
         if not vehicle_make.strip():
@@ -884,12 +1058,11 @@ def page_customer_form():
                 st.error(err)
             return
 
-        # --- Determine territory from city ---
-        territory = CITY_TERRITORIES[city]
-
-        # --- Geocode the address ---
+        # --- Geocode the address and pick the territory by county ---
         with st.spinner("Processing your request..."):
-            lat, lon = geocode_address(address, city)
+            territory = resolve_territory(address, city, zip_digits)
+            lat, lon = territory["latitude"], territory["longitude"]
+            city = territory["matched_city"] or city.strip().title()
 
             # --- Build the appointment record ---
             appt = {
@@ -912,6 +1085,7 @@ def page_customer_form():
                 "latitude": lat,
                 "longitude": lon,
                 "source": "ekho",
+                "notes": f"Routed by {territory['resolved_by']} → {territory['county']}",
             }
 
             # --- Save to Supabase ---
@@ -1029,7 +1203,7 @@ def admin_tab_leads(db):
     with col1:
         status_filter = st.selectbox("Status", ["All", "pending", "confirmed", "completed", "cancelled"])
     with col2:
-        territory_filter = st.selectbox("Territory", ["All", "qvv", "henry", "joy"])
+        territory_filter = st.selectbox("Territory", ["All", "qvv", "henry", "joy", "unassigned"])
     with col3:
         date_col1, date_col2 = st.columns(2)
         with date_col1:

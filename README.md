@@ -2,22 +2,35 @@
 
 Streamlit web app for scheduling VIN verification appointments across Southern California. Leads route to Quick VIN Verification (QVV) or partner verifiers based on the customer's city.
 
-**Live App:** [qvv-scheduler.streamlit.app](https://qvv-scheduler.streamlit.app/) (redeployed 2026-07-28; the original March URL is dead)
+**Live App:** [schedule.vinverifications.com](https://schedule.vinverifications.com/) — self-hosted on the QAT Windows VPS since 2026-09-16 (always on, never sleeps). Alias: `schedule.quickautotags.com`.
+
+> The old Streamlit Community Cloud URL (`qvv-scheduler.streamlit.app`) went to sleep after 12 h without visitors and showed customers a "Zzzz" page. It is retired — do not share it.
 
 ## What It Does
 
-- **Customer Form** (root URL): Customers select their city, enter vehicle info, pick a date/time. The app routes the lead to the right team automatically.
+- **Customer Form** (root URL): Customers type their address, enter vehicle info, pick a date/time. The app geocodes the address and routes the lead to the right team by county.
 - **Admin Panel** (`?page=admin`): Password-protected dashboard with lead management, dispatch map, and partner configuration.
 
 ### Lead Routing
 
-| Territory | Cities | Routing |
-|-----------|--------|---------|
-| **QVV** | Riverside, San Bernardino, Orange County | Email + SMS to QVV team → confirm via Bookings |
-| **Henry** | LA / South LA (Los Angeles, Long Beach, etc.) **and** San Fernando Valley (Burbank, Glendale, etc.) | Email + SMS to partner |
-| **Joy** | San Diego County (San Diego, Chula Vista, etc.) | Email + SMS to partner |
+Routing is **by county, resolved from the customer's typed address** (street, city, ZIP — all free text, no dropdown).
+
+1. **US Census Geocoder** (free, no key) → county + coordinates
+2. **OpenStreetMap Nominatim** (free) → fallback if Census has no match
+3. **Built-in city table** (~450 cities/communities across the five counties) → fallback if both geocoders fail but the typed city is recognised; also supplies the finer `region` tag used by dispatch-map conflict warnings
+4. Anything else → `unassigned`
+
+| County | Territory | Routing |
+|--------|-----------|---------|
+| Riverside, San Bernardino, Orange | **QVV** | Zoho Desk ticket + email/SMS to QVV team → confirm via Bookings |
+| Los Angeles | **Henry** | Email + SMS to partner |
+| San Diego | **Joy** | Email + SMS to partner |
+| Any other county (e.g. Ventura), or address not found | **unassigned** | Treated like a QVV lead but flagged **[NEEDS ROUTING]** in the ticket, email and SMS so the team hands it off manually. Never dropped. |
+
+Each saved appointment records how it was routed in `notes` (e.g. `Routed by census → Riverside County`). The admin Leads tab can filter on `unassigned`.
 
 > San Fernando Valley was Michael's territory until 2026-07; Henry Alvarez took it over.
+> Until 2026-09-23 the form used a fixed dropdown of ~100 cities; customers outside those exact names could not book.
 
 ### Notifications
 
@@ -112,7 +125,27 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-### 7. Deploy to Streamlit Cloud
+### 7. Production Deployment (QAT VPS — current)
+
+The app runs as a Windows service under NSSM and is published through the existing Cloudflare Tunnel.
+
+| Item | Value |
+|------|-------|
+| Service name | `QVVScheduler` (NSSM, auto-start, restarts on crash after 5 s) |
+| Command | `.venv\Scripts\python.exe -m streamlit run app.py` in `C:\AI Folder\Claude\qvv-scheduler` |
+| Port | 8300 (bound to 127.0.0.1; config in `.streamlit/config.toml`) |
+| Public hostnames | `schedule.vinverifications.com` (primary, customer-facing) and `schedule.quickautotags.com` (alias) → tunnel `07be7746-…` → `http://localhost:8300`. DNS: CNAME `schedule` → `07be7746-7121-44fe-86db-3d9347a72c03.cfargotunnel.com`, proxied, in each zone |
+| Secrets | `.streamlit/secrets.toml` (git-ignored) |
+| Logs | `logs\service_stdout.log`, `logs\service_stderr.log` (rotated at 5 MB) |
+
+```bat
+nssm status QVVScheduler
+nssm restart QVVScheduler
+```
+
+After a `git pull`, restart the service to pick up code changes (file watching is disabled in production).
+
+### 7b. Deploy to Streamlit Cloud (legacy — no longer used)
 
 1. Push code to GitHub
 2. Go to [share.streamlit.io](https://share.streamlit.io)
@@ -129,8 +162,8 @@ streamlit run app.py
 - **Future-proofed schema**: Fields for `confirmed_date/time`, `assigned_to`, `notes`, and `source` are in the DB but unused in V1 UI
 - **Multi-source ready**: The `source` field defaults to `"ekho"` — future integrations (Zoho Forms, website intake) will use different values
 - **Region tags**: Enable scheduling conflict warnings now and will power V2 auto-scheduling
-- **Partner cities**: Hardcoded in V1 — V2 will pull from the Supabase `partners.cities_csv` field
-- **Geocoding**: Free Nominatim with 24hr cache — no API key needed
+- **Partner territories**: county → partner map is hardcoded (`COUNTY_TERRITORIES`); the city table is the fallback — V2 will pull both from the Supabase `partners` table
+- **Geocoding**: US Census Geocoder + Nominatim, both free/keyless, 24 h cache — geocoding decides routing, and an outage degrades to the city table, never blocks a booking
 - **Zoho Desk integration**: Planned — leads will also create tickets in Zoho Desk via REST API for full ticket lifecycle tracking
 
 ## Changelog
@@ -147,3 +180,6 @@ streamlit run app.py
 | 2026-07-28 | Removed Teams webhook — QVV leads now email + SMS via `QVV_LEADS_EMAIL`/`QVV_LEADS_PHONE`. San Fernando Valley reassigned from Michael to Henry Alvarez (Michael no longer a partner). Ekho (support@ekho.com) CC'd on all lead emails. Redeployed at qvv-scheduler.streamlit.app |
 | 2026-07-28 | Email switched from Zoho SMTP to SendGrid API — From address now configurable via `SENDGRID_FROM_EMAIL` (leads@quickautotags.com after domain auth) |
 | 2026-07-28 | QVV leads now create Zoho Desk tickets directly via API (Standard dept, contact = customer) — email-to-Desk intake was getting spam-filtered. Ekho gets the lead email directly when `QVV_LEADS_EMAIL` is unset |
+| 2026-09-16 | Moved off Streamlit Community Cloud (app kept sleeping) to the QAT VPS: NSSM service `QVVScheduler`, port 8300, `schedule.quickautotags.com` via Cloudflare Tunnel. Added `.streamlit/config.toml` |
+| 2026-09-23 | Branded hostname `schedule.vinverifications.com` added (CNAME to the tunnel in the vinverifications.com zone) — now the primary customer URL |
+| 2026-09-23 | Routing rebuilt: city dropdown replaced by free-text address/city/ZIP; county resolved via US Census Geocoder → Nominatim → 450-city table; out-of-area or unlocatable leads tagged `unassigned` and flagged [NEEDS ROUTING] to the QVV team |
